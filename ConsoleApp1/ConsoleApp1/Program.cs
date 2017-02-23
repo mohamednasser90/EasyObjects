@@ -8,7 +8,7 @@ namespace ConsoleApp1
     {
         static void Main(string[] args)
         {
-            string connectionString = @"Data Source=.\SQLEXPRESS;Initial Catalog=Northwind;Integrated Security=True;";
+            string connectionString = ConfigurationManager 
 
             using (SqlConnection conn = new SqlConnection(connectionString))
             {
