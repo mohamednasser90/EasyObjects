@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Data.SqlClient;
 using Dapper;
 
@@ -11,32 +12,111 @@ namespace ConsoleApp1
             try
             {
                 InitializeDB();
-
-                string connectionString = @"Data Source=(LocalDB)\MSSQLLocalDB;Initial Catalog=Northwind;Integrated Security=True;";
-
-                using (SqlConnection conn = new SqlConnection(connectionString))
-                {
-                    string sql = @"
-SELECT [RegionID]
-      ,[RegionDescription]
-  FROM [Northwind].[dbo].[Region]";
-
-                    var list = conn.Query<Region>(sql);
-
-                    Console.WriteLine("ID\tDescription");
-                    foreach (var l in list)
-                    {
-                        Console.WriteLine("{0}\t{1}", l.RegionID, l.RegionDescription);
-                    }
-                }
+                TestRegion();
+                TestShippers();
             }
             catch (Exception ex)
             {
                 Console.WriteLine(ex.Message);
+                Console.WriteLine(ex.StackTrace);
             }
 
-            Console.WriteLine("Press <Enter> to continue...");
+            Console.WriteLine("\nPress <Enter> to continue...");
             Console.ReadLine();
+        }
+
+        private static void TestShippers()
+        {
+            Console.WriteLine();
+            Console.WriteLine("=====================================");
+            Console.WriteLine("Shippers table");
+            Console.WriteLine("=====================================");
+
+            Console.WriteLine("\nSelect all rows from the table");
+            var list = ShippersDataContext.Instance.Select();
+            PrintList(list);
+
+            Console.WriteLine("\nSelect model by primary key");
+            var model = ShippersDataContext.Instance.SelectByPk(1);
+            PrintList(new List<Shippers> { model });
+
+            Console.WriteLine("\nSelect model by property");
+            list = ShippersDataContext.Instance.Select(new Shippers { CompanyName = "Federal Shipping" });
+            PrintList(list);
+
+            Console.WriteLine("\nInsert new model ");
+            model = new Shippers { CompanyName = "New Company", Phone = "867-5309" };
+            ShippersDataContext.Instance.Insert(model);
+            list = ShippersDataContext.Instance.Select();
+            PrintList(list);
+
+            Console.WriteLine("\nUpdate model ");
+            model = new Shippers { ShipperID = 4, CompanyName = "New Company Updated", Phone = "(503) 867-5309" };
+            ShippersDataContext.Instance.Update(model);
+            list = ShippersDataContext.Instance.Select();
+            PrintList(list);
+
+            Console.WriteLine("\nDelete model by PK");
+            ShippersDataContext.Instance.DeleteByPk(4);
+            list = ShippersDataContext.Instance.Select();
+            PrintList(list);
+        }
+
+        private static void TestRegion()
+        {
+            Console.WriteLine();
+            Console.WriteLine("=====================================");
+            Console.WriteLine("Region table");
+            Console.WriteLine("=====================================");
+
+            Console.WriteLine("\nSelect all rows from the table");
+            var list = RegionDataContext.Instance.Select();
+            PrintList(list);
+
+            Console.WriteLine("\nSelect model by primary key");
+            var model = RegionDataContext.Instance.SelectByPk(1);
+            PrintList(new List<Region> { model });
+
+            Console.WriteLine("\nSelect model by property");
+            list = RegionDataContext.Instance.Select(new Region { RegionDescription = "Western" });
+            PrintList(list);
+
+            Console.WriteLine("\nInsert new model ");
+            model = new Region { RegionID = 100, RegionDescription = "New Region" };
+            RegionDataContext.Instance.Insert(model);
+            list = RegionDataContext.Instance.Select();
+            PrintList(list);
+
+            Console.WriteLine("\nUpdate model ");
+            model = new Region { RegionID = 100, RegionDescription = "New Region Updated" };
+            RegionDataContext.Instance.Update(model);
+            list = RegionDataContext.Instance.Select();
+            PrintList(list);
+
+            Console.WriteLine("\nDelete model by PK");
+            RegionDataContext.Instance.DeleteByPk(100);
+            list = RegionDataContext.Instance.Select();
+            PrintList(list);
+        }
+
+        private static void PrintList(List<Region> list)
+        {
+            Console.WriteLine("ID\tDescription");
+
+            foreach (var l in list)
+            {
+                Console.WriteLine($"{l.RegionID}\t{l.RegionDescription}");
+            }
+        }
+
+        private static void PrintList(List<Shippers> list)
+        {
+            Console.WriteLine("ID\tCompanyName\tPhone");
+
+            foreach (var l in list)
+            {
+                Console.WriteLine($"{l.ShipperID}\t{l.CompanyName}\t{l.Phone}");
+            }
         }
 
         private static void InitializeDB()
