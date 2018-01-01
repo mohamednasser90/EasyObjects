@@ -1,5 +1,0 @@
-<configuration>
-  <connectionStrings>
-    <add name="Northwind" connectionString="server=(local)\SQLEXPRESS;database=Northwind;Integrated Security=true" providerName="System.Data.SqlClient"/>
-  </connectionStrings>
-</configuration>
