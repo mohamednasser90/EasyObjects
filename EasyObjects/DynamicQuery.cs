@@ -12,148 +12,138 @@
 //===============================================================================
 
 using System;
-using System.Text;
-using System.Configuration;
+using System.Collections;
 using System.Data;
 using System.Data.Common;
-using System.Collections;
-using System.Globalization;
-using Microsoft.Practices.EnterpriseLibrary.Common;
-using Microsoft.Practices.EnterpriseLibrary.Common.Configuration.ObjectBuilder;
-using Microsoft.Practices.EnterpriseLibrary.Common.Instrumentation;
-using Microsoft.Practices.EnterpriseLibrary.Data;
-
-//using NCI.EasyObjects.Configuration;
-using NCI.EasyObjects.DynamicQueryProvider;
+using System.Data.SqlClient;
+using System.Text;
 
 namespace NCI.EasyObjects
 {
-	/// <summary>
-	/// DynamicQuery allows you to build provider independent dynamic queries against the database from 
-	/// outside your data layer. All  selection criteria are passed in via Parameters in order to prevent 
-	/// sql injection techniques often attempted by hackers.
-	/// </summary>
-	/// <example>
-	/// VB.NET
-	/// <code>
-	/// Dim emps As New Employees
-	///
-	/// ' LastNames that have "A" anywher in them
-	/// emps.Where.LastName.Value = "%A%"
-	/// emps.Where.LastName.Operator = WhereParameter.Operand.Like_
-	///
-	/// ' Only return the EmployeeID and LastName
-	/// emps.Query.AddResultColumn(EmployeesSchema.EmployeeID)
-	/// emps.Query.AddResultColumn(EmployeesSchema.LastName)
-	///
-	/// ' Order by LastName 
-	/// ' (you can add as many order by columns as you like by repeatedly calling this)
-	/// emps.Query.AddOrderBy(EmployeesSchema.LastName, WhereParameter.Dir.ASC)
-	///
-	/// ' Bring back only distinct rows
-	/// emps.Query.Distinct = True
-	///
-	/// ' Bring back the top 10 rows
-	/// emps.Query.TopN = 10
-	///
-	/// emps.Query.Load()</code>
-	///	C#
-	///	<code>
-	/// Employees emps = new Employees();
-	///
-	/// // LastNames that have "A" anywher in them
-	/// emps.Where.LastName.Value = "%A%";
-	/// emps.Where.LastName.Operator = WhereParameter.Operand.Like;
-	///
-	/// // Only return the EmployeeID and LastName
-	/// emps.Query.AddResultColumn(EmployeesSchema.EmployeeID);
-	/// emps.Query.AddResultColumn(EmployeesSchema.LastName);
-	///
-	/// // Order by LastName 
-	/// // (you can add as many order by columns as you like by repeatedly calling this)
-	/// emps.Query.AddOrderBy(EmployeesSchema.LastName, WhereParameter.Dir.ASC);
-	///
-	/// // Bring back only distinct rows
-	/// emps.Query.Distinct = true;
-	///
-	/// // Bring back the top 10 rows
-	/// emps.Query.TopN = 10;
-	///
-	/// emps.Query.Load();</code>
-	/// </example>
-    [ConfigurationNameMapper(typeof(DynamicQueryMapper))]
-    [CustomFactory(typeof(DynamicQueryCustomFactory))]
+    /// <summary>
+    /// DynamicQuery allows you to build provider independent dynamic queries against the database from 
+    /// outside your data layer. All  selection criteria are passed in via Parameters in order to prevent 
+    /// sql injection techniques often attempted by hackers.
+    /// </summary>
+    /// <example>
+    /// VB.NET
+    /// <code>
+    /// Dim emps As New Employees
+    ///
+    /// ' LastNames that have "A" anywher in them
+    /// emps.Where.LastName.Value = "%A%"
+    /// emps.Where.LastName.Operator = WhereParameter.Operand.Like_
+    ///
+    /// ' Only return the EmployeeID and LastName
+    /// emps.Query.AddResultColumn(EmployeesSchema.EmployeeID)
+    /// emps.Query.AddResultColumn(EmployeesSchema.LastName)
+    ///
+    /// ' Order by LastName 
+    /// ' (you can add as many order by columns as you like by repeatedly calling this)
+    /// emps.Query.AddOrderBy(EmployeesSchema.LastName, WhereParameter.Dir.ASC)
+    ///
+    /// ' Bring back only distinct rows
+    /// emps.Query.Distinct = True
+    ///
+    /// ' Bring back the top 10 rows
+    /// emps.Query.TopN = 10
+    ///
+    /// emps.Query.Load()</code>
+    ///	C#
+    ///	<code>
+    /// Employees emps = new Employees();
+    ///
+    /// // LastNames that have "A" anywher in them
+    /// emps.Where.LastName.Value = "%A%";
+    /// emps.Where.LastName.Operator = WhereParameter.Operand.Like;
+    ///
+    /// // Only return the EmployeeID and LastName
+    /// emps.Query.AddResultColumn(EmployeesSchema.EmployeeID);
+    /// emps.Query.AddResultColumn(EmployeesSchema.LastName);
+    ///
+    /// // Order by LastName 
+    /// // (you can add as many order by columns as you like by repeatedly calling this)
+    /// emps.Query.AddOrderBy(EmployeesSchema.LastName, WhereParameter.Dir.ASC);
+    ///
+    /// // Bring back only distinct rows
+    /// emps.Query.Distinct = true;
+    ///
+    /// // Bring back the top 10 rows
+    /// emps.Query.TopN = 10;
+    ///
+    /// emps.Query.Load();</code>
+    /// </example>
     public abstract class DynamicQuery
-	{
+    {
         //private DynamicQueryProviderFactory dqProviderFactory;
 
         /// <summary>
-		/// Used by derived classes
-		/// </summary>
-		protected bool _distinct = false;
-		/// <summary>
-		/// Used by derived classes
-		/// </summary>
-		protected int _topN = -1;
-		/// <summary>
-		/// Used by derived classes
-		/// </summary>
-		protected ArrayList _whereParameters = null;
-		/// <summary>
-		/// Used by derived classes
-		/// </summary>
-		protected string _resultColumns = string.Empty;
-		/// <summary>
-		/// Used by derived classes
-		/// </summary>
-		protected string _orderBy = string.Empty;
-		/// <summary>
-		/// Used by derived classes
-		/// </summary>
-		protected string _updateColumns = string.Empty;
-		/// <summary>
-		/// Used by derived classes
-		/// </summary>
-		protected string _insertColumns = string.Empty;
-		/// <summary>
-		/// Used by derived classes
-		/// </summary>
-		protected string _insertColumnValues = string.Empty;
-		/// <summary>
-		/// Used by derived classes
-		/// </summary>
-		protected string _insertParameters = string.Empty;
-		/// <summary>
-		/// Used by derived classes
-		/// </summary>
-		protected ArrayList _parameterValues = null;
-		/// <summary>
-		/// Used by derived classes
-		/// </summary>
-		protected EasyObject _entity;
+        /// Used by derived classes
+        /// </summary>
+        protected bool _distinct = false;
+        /// <summary>
+        /// Used by derived classes
+        /// </summary>
+        protected int _topN = -1;
+        /// <summary>
+        /// Used by derived classes
+        /// </summary>
+        protected ArrayList _whereParameters = null;
+        /// <summary>
+        /// Used by derived classes
+        /// </summary>
+        protected string _resultColumns = string.Empty;
+        /// <summary>
+        /// Used by derived classes
+        /// </summary>
+        protected string _orderBy = string.Empty;
+        /// <summary>
+        /// Used by derived classes
+        /// </summary>
+        protected string _updateColumns = string.Empty;
+        /// <summary>
+        /// Used by derived classes
+        /// </summary>
+        protected string _insertColumns = string.Empty;
+        /// <summary>
+        /// Used by derived classes
+        /// </summary>
+        protected string _insertColumnValues = string.Empty;
+        /// <summary>
+        /// Used by derived classes
+        /// </summary>
+        protected string _insertParameters = string.Empty;
+        /// <summary>
+        /// Used by derived classes
+        /// </summary>
+        protected ArrayList _parameterValues = null;
+        /// <summary>
+        /// Used by derived classes
+        /// </summary>
+        protected EasyObject _entity;
 
-		private string _lastQuery = string.Empty;
+        private string _lastQuery = string.Empty;
 
-		/// <summary>
-		/// Used by derived classes
-		/// </summary>
-		protected bool _countAll = false;
-		/// <summary>
-		/// Used by derived classes
-		/// </summary>
-		protected string _countAllAlias = string.Empty;
-		/// <summary>
-		/// Used by derived classes
-		/// </summary>
-		protected bool _withRollup = false;
-		/// <summary>
-		/// Used by derived classes
-		/// </summary>
-		protected string _groupBy = string.Empty;
-		/// <summary>
-		/// Used by derived classes
-		/// </summary>
-		protected ArrayList _aggregateParameters = null;
+        /// <summary>
+        /// Used by derived classes
+        /// </summary>
+        protected bool _countAll = false;
+        /// <summary>
+        /// Used by derived classes
+        /// </summary>
+        protected string _countAllAlias = string.Empty;
+        /// <summary>
+        /// Used by derived classes
+        /// </summary>
+        protected bool _withRollup = false;
+        /// <summary>
+        /// Used by derived classes
+        /// </summary>
+        protected string _groupBy = string.Empty;
+        /// <summary>
+        /// Used by derived classes
+        /// </summary>
+        protected ArrayList _aggregateParameters = null;
         /// <summary>
         /// Used by derived classes
         /// </summary>
@@ -162,11 +152,11 @@ namespace NCI.EasyObjects
         private string _tableName = string.Empty;
         private string _querySource = string.Empty;
 
-		/// <summary>
-		/// Default constructor
-		/// </summary>
-		public DynamicQuery()
-		{}
+        /// <summary>
+        /// Default constructor
+        /// </summary>
+        public DynamicQuery()
+        { }
 
         /// <summary>
         /// There is no need to call this, just access your EasyObject.Query property and it will be created on the fly.
@@ -313,28 +303,28 @@ namespace NCI.EasyObjects
         /// <param name="db">A database object from the Enterprise Library</param>
         /// <param name="dbCommand">A command wrapper from the Enterprise Library</param>
         /// <param name="conjunction">The conjunction to use between parameters in the WHERE clause</param>
-        protected abstract void BuildSelectQuery(Database db, DbCommand dbCommand, string conjunction);
+        protected abstract void BuildSelectQuery(DbCommand dbCommand, string conjunction);
         /// <summary>
         /// When implemented by a class, builds a provider-specific SQL UPDATE query.
         /// </summary>
         /// <param name="db">A database object from the Enterprise Library</param>
         /// <param name="dbCommand">A command wrapper from the Enterprise Library</param>
         /// <param name="conjunction">The conjunction to use between parameters in the WHERE clause</param>
-        protected abstract void BuildUpdateQuery(Database db, DbCommand dbCommand, string conjunction);
+        protected abstract void BuildUpdateQuery(DbCommand dbCommand, string conjunction);
         /// <summary>
         /// When implemented by a class, builds a provider-specific SQL INSERT query.
         /// </summary>
         /// <param name="db">A database object from the Enterprise Library</param>
         /// <param name="dbCommand">A command wrapper from the Enterprise Library</param>
         /// <param name="conjunction">The conjunction to use between parameters in the WHERE clause</param>
-        protected abstract void BuildInsertQuery(Database db, DbCommand dbCommand, string conjunction);
+        protected abstract void BuildInsertQuery(DbCommand dbCommand, string conjunction);
         /// <summary>
         /// When implemented by a class, builds a provider-specific SQL DELETE query.
         /// </summary>
         /// <param name="db">A database object from the Enterprise Library</param>
         /// <param name="dbCommand">A command wrapper from the Enterprise Library</param>
         /// <param name="conjunction">The conjunction to use between parameters in the WHERE clause</param>
-        protected abstract void BuildDeleteQuery(Database db, DbCommand dbCommand, string conjunction);
+        protected abstract void BuildDeleteQuery(DbCommand dbCommand, string conjunction);
 
         /// <summary>
         /// An internal callback reference to the EasyObject. There is no need to use this externally.
@@ -497,27 +487,6 @@ namespace NCI.EasyObjects
         }
 
         /// <summary>
-        /// This event is triggered when the TransactionManager calls for a commit to the current transaction.
-        /// </summary>
-        /// <param name="sender">The object that triggered the event</param>
-        /// <param name="e">Any event arguments</param>
-        /// <remarks>
-        /// EasyObjects can't perform an AcceptChanges on the internal DataTable until the TransactionManager
-        /// is ready to commit the current transaction. Because there may be many objects in a single transaction, this event
-        /// is setup to receive notification when the TransactionManager is ready for the commit. EasyObjects then calls the
-        /// AcceptChanges method so that the internal DataTable properly reflects the current state of the data.
-        /// </remarks>
-        private void txMgr_TransactionCommitted(object sender, EventArgs e)
-        {
-            // Reset the internal DataTable
-            this._entity.DataTable.AcceptChanges();
-
-            // Unsubscribe from the event
-            TransactionManager txMgr = TransactionManager.ThreadTransactionMgr();
-            txMgr.TransactionCommitted -= new TransactionManager.TransactionCommittedDelegate(this.txMgr_TransactionCommitted);
-        }
-
-        /// <summary>
         /// Execute the Query and loads your BusinessEntity. The default conjunction between the WHERE parameters is "AND"
         /// </summary>
         /// <returns>True if at least one record was loaded</returns>
@@ -536,44 +505,37 @@ namespace NCI.EasyObjects
         public bool Load(string conjunction)
         {
             bool loaded = false;
-            DataSet ds = null;
+            DataTable dataTable = null;
 
             ArgumentValidation.CheckForNullReference(_entity, "EasyObject");
 
-            // Create the Database object, using the default database service. The
-            // default database service is determined through configuration.
-            Database db = _entity.GetDatabase();
-
-            DbCommand dbCommand = db.GetSqlStringCommand("NULL");
-
-            // Set the command timeout
-            dbCommand.CommandTimeout = _entity.CommandTimeout;
+            DbCommand dbCommand = new SqlCommand
+            {
+                CommandType = CommandType.Text,
+                CommandTimeout = _entity.CommandTimeout
+            };
 
             try
             {
-                BuildSelectQuery(db, dbCommand, conjunction);
+                BuildSelectQuery(dbCommand, conjunction);
                 _lastQuery = dbCommand.CommandText;
 
-                TransactionManager txMgr = TransactionManager.ThreadTransactionMgr();
-
-                ds = new DataSet(_entity.TableName + "DataSet");
-
-                DbTransaction tx = txMgr.GetTransaction(db, false);
-                if (tx == null)
+                using (var con = new SqlConnection(this._entity.ConnectionString))
                 {
-                    ds = db.ExecuteDataSet(dbCommand);
-                }
-                else
-                {
-                    ds = db.ExecuteDataSet(dbCommand, tx);
+                    dbCommand.Connection = con;
+
+                    using (var adapter = new SqlDataAdapter((SqlCommand)dbCommand))
+                    {
+                        adapter.Fill(dataTable);
+                    }
                 }
 
-                // Load the object from the dataset
-                this._entity.Load(ds);
+                // Load the object from the dataTable
+                this._entity.Load(dataTable);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                throw ex;
+                throw;
             }
             finally
             {
@@ -604,45 +566,26 @@ namespace NCI.EasyObjects
         {
             ArgumentValidation.CheckForNullReference(_entity, "EasyObject");
 
-            // Create the Database object, using the default database service. The
-            // default database service is determined through configuration.
-            Database db = _entity.GetDatabase();
-
-            DbCommand dbCommand = db.GetSqlStringCommand("NULL");
-            TransactionManager txMgr = TransactionManager.ThreadTransactionMgr();
+            DbCommand dbCommand = new SqlCommand
+            {
+                CommandType = CommandType.Text,
+                CommandTimeout = _entity.CommandTimeout
+            };
 
             try
             {
-                BuildUpdateQuery(db, dbCommand, conjunction);
+                BuildUpdateQuery(dbCommand, conjunction);
                 _lastQuery = dbCommand.CommandText;
 
-                // Initialize the transaction, including an event watcher so
-                // that we get notified when the transaction is committed.
-                txMgr.TransactionCommitted += new TransactionManager.TransactionCommittedDelegate(txMgr_TransactionCommitted);
-                txMgr.BeginTransaction();
-
-                // Perform the update
-                DbTransaction tx = txMgr.GetTransaction(db);
-                if (tx == null)
+                using (var con = new SqlConnection(this._entity.ConnectionString))
                 {
-                    db.ExecuteNonQuery(dbCommand);
+                    dbCommand.Connection = con;
+                    dbCommand.ExecuteNonQuery();
                 }
-                else
-                {
-                    db.ExecuteNonQuery(dbCommand, tx);
-                }
-
-                // Clean up resources
-                txMgr.CommitTransaction();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                if (!(txMgr == null))
-                {
-                    txMgr.RollbackTransaction();
-                    txMgr.TransactionCommitted -= new TransactionManager.TransactionCommittedDelegate(this.txMgr_TransactionCommitted);
-                }
-                throw ex;
+                throw;
             }
         }
 
@@ -667,45 +610,26 @@ namespace NCI.EasyObjects
         {
             ArgumentValidation.CheckForNullReference(_entity, "EasyObject");
 
-            // Create the Database object, using the default database service. The
-            // default database service is determined through configuration.
-            Database db = _entity.GetDatabase();
-
-            DbCommand dbCommand = db.GetSqlStringCommand("NULL");
-            TransactionManager txMgr = TransactionManager.ThreadTransactionMgr();
+            DbCommand dbCommand = new SqlCommand
+            {
+                CommandType = CommandType.Text,
+                CommandTimeout = _entity.CommandTimeout
+            };
 
             try
             {
-                BuildInsertQuery(db, dbCommand, conjunction);
+                BuildUpdateQuery(dbCommand, conjunction);
                 _lastQuery = dbCommand.CommandText;
 
-                // Initialize the transaction, including an event watcher so
-                // that we get notified when the transaction is committed.
-                txMgr.TransactionCommitted += new TransactionManager.TransactionCommittedDelegate(txMgr_TransactionCommitted);
-                txMgr.BeginTransaction();
-
-                // Perform the update
-                DbTransaction tx = txMgr.GetTransaction(db);
-                if (tx == null)
+                using (var con = new SqlConnection(this._entity.ConnectionString))
                 {
-                    db.ExecuteNonQuery(dbCommand);
+                    dbCommand.Connection = con;
+                    dbCommand.ExecuteNonQuery();
                 }
-                else
-                {
-                    db.ExecuteNonQuery(dbCommand, tx);
-                }
-
-                // Clean up resources
-                txMgr.CommitTransaction();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                if (!(txMgr == null))
-                {
-                    txMgr.RollbackTransaction();
-                    txMgr.TransactionCommitted -= new TransactionManager.TransactionCommittedDelegate(this.txMgr_TransactionCommitted);
-                }
-                throw ex;
+                throw;
             }
         }
 
@@ -728,15 +652,15 @@ namespace NCI.EasyObjects
         {
             ArgumentValidation.CheckForNullReference(_entity, "EasyObject");
 
-            // Create the Database object, using the default database service. The
-            // default database service is determined through configuration.
-            Database db = _entity.GetDatabase();
-
-            DbCommand dbCommand = db.GetSqlStringCommand("NULL");
+            DbCommand dbCommand = new SqlCommand
+            {
+                CommandType = CommandType.Text,
+                CommandTimeout = _entity.CommandTimeout
+            };
 
             try
             {
-                BuildUpdateQuery(db, dbCommand, conjunction);
+                BuildUpdateQuery(dbCommand, conjunction);
                 _lastQuery = dbCommand.CommandText;
 
                 return dbCommand;
@@ -766,15 +690,15 @@ namespace NCI.EasyObjects
         {
             ArgumentValidation.CheckForNullReference(_entity, "EasyObject");
 
-            // Create the Database object, using the default database service. The
-            // default database service is determined through configuration.
-            Database db = _entity.GetDatabase();
-
-            DbCommand dbCommand = db.GetSqlStringCommand("NULL");
+            DbCommand dbCommand = new SqlCommand
+            {
+                CommandType = CommandType.Text,
+                CommandTimeout = _entity.CommandTimeout
+            };
 
             try
             {
-                BuildInsertQuery(db, dbCommand, conjunction);
+                BuildInsertQuery(dbCommand, conjunction);
                 _lastQuery = dbCommand.CommandText;
 
                 return dbCommand;
@@ -804,15 +728,15 @@ namespace NCI.EasyObjects
         {
             ArgumentValidation.CheckForNullReference(_entity, "EasyObject");
 
-            // Create the Database object, using the default database service. The
-            // default database service is determined through configuration.
-            Database db = _entity.GetDatabase();
-
-            DbCommand dbCommand = db.GetSqlStringCommand("NULL");
+            DbCommand dbCommand = new SqlCommand
+            {
+                CommandType = CommandType.Text,
+                CommandTimeout = _entity.CommandTimeout
+            };
 
             try
             {
-                BuildDeleteQuery(db, dbCommand, conjunction);
+                BuildDeleteQuery(dbCommand, conjunction);
                 _lastQuery = dbCommand.CommandText;
 
                 return dbCommand;
@@ -917,9 +841,10 @@ namespace NCI.EasyObjects
         {
             AddUpdateColumn(item);
 
-            ValueParameter param = new ValueParameter(item);
-            param.Value = paramValue;
-            _parameterValues.Add(param);
+            _parameterValues.Add(new ValueParameter(item)
+            {
+                Value = paramValue
+            });
         }
 
         /// <summary>
@@ -972,9 +897,10 @@ namespace NCI.EasyObjects
         {
             AddInsertColumn(item);
 
-            ValueParameter param = new ValueParameter(item);
-            param.Value = paramValue;
-            _parameterValues.Add(param);
+            _parameterValues.Add(new ValueParameter(item)
+            {
+                Value = paramValue
+            });
         }
 
         /// <summary>

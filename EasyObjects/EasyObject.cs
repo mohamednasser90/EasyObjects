@@ -12,18 +12,15 @@
 //===============================================================================
 
 using System;
-using System.IO;
-using System.Xml.Serialization;
-using System.Data;
-using System.Text;
 using System.Collections;
-using System.Collections.Specialized;
 using System.Collections.Generic;
-using System.Runtime.Serialization;
-using System.Reflection;
+using System.Collections.Specialized;
+using System.Data;
 using System.Data.Common;
-
-using Microsoft.Practices.EnterpriseLibrary.Data;
+using System.Data.SqlClient;
+using System.IO;
+using System.Reflection;
+using System.Xml.Serialization;
 
 namespace NCI.EasyObjects
 {
@@ -59,7 +56,6 @@ namespace NCI.EasyObjects
         string _connectionDatabase = string.Empty;
         string _connectionServer = string.Empty;
         bool _useIntegratedSecurity = false;
-        //DBProviderType _dbProviderType = DBProviderType.SqlServer;
 
         // Query source for SELECT queries, such as a table or view
         string _querySource = string.Empty;
@@ -87,7 +83,7 @@ namespace NCI.EasyObjects
 
         /// <summary>
         /// The default constructor.
-        /// </summary>
+        /// </summary>  
         public EasyObject() { }
 
         /// <summary>
@@ -276,7 +272,7 @@ namespace NCI.EasyObjects
                     }
                 }
             }
-                
+
             _dataTable.PrimaryKey = this.PrimaryKeys.ToArray();
         }
 
@@ -521,9 +517,6 @@ namespace NCI.EasyObjects
             // Call the PreSave
             this.PreSave();
 
-            TransactionManager txMgr = TransactionManager.ThreadTransactionMgr();
-            DataSet ds = new DataSet();
-
             try
             {
                 bool needToInsert = false;
@@ -547,44 +540,24 @@ namespace NCI.EasyObjects
 
                 if (needToInsert || needToUpdate || needToDelete)
                 {
-                    DbCommand insertCommand = null;
-                    DbCommand updateCommand = null;
-                    DbCommand deleteCommand = null;
+                    IDbDataAdapter da = new SqlDataAdapter();
 
-                    if (needToInsert) { insertCommand = GetInsertCommand(commandType); }
-                    if (needToUpdate) { updateCommand = GetUpdateCommand(commandType); }
-                    if (needToDelete) { deleteCommand = GetDeleteCommand(commandType); }
+                    if (needToInsert) { da.InsertCommand = GetInsertCommand(commandType); }
+                    if (needToUpdate) { da.UpdateCommand = GetUpdateCommand(commandType); }
+                    if (needToDelete) { da.DeleteCommand = GetDeleteCommand(commandType); }
 
-                    // Retrieve the EntLib database
-                    Database db = GetDatabase();
 
-                    //  Add the current DataTable to a DataSet
-                    ds.Tables.Add(this.DataTable);
-
-                    // Initialize the transaction, including an event watcher so
-                    // that we get notified when the transaction is committed.
-                    txMgr.TransactionCommitted += new TransactionManager.TransactionCommittedDelegate(txMgr_TransactionCommitted);
-                    txMgr.BeginTransaction();
+                    DbDataAdapter dbDataAdapter = da as DbDataAdapter;
 
                     // Perform the update
-                    int rowsAffected = db.UpdateDataSet(ds, this.TableName, insertCommand, updateCommand, deleteCommand, txMgr.GetTransaction(db));
+                    dbDataAdapter.Update(_dataTable);
 
-                    // Clean up resources
-                    txMgr.CommitTransaction();
+                    this.AcceptChanges();
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                if (!(txMgr == null))
-                {
-                    txMgr.RollbackTransaction();
-                    txMgr.TransactionCommitted -= new TransactionManager.TransactionCommittedDelegate(this.txMgr_TransactionCommitted);
-                }
-                throw ex;
-            }
-            finally
-            {
-                ds.Tables.Clear();
+                throw;
             }
         }
 
@@ -597,28 +570,6 @@ namespace NCI.EasyObjects
             this.Save(this.DefaultCommandType);
         }
 
-        /// <summary>
-        /// This event is triggered when the TransactionManager calls for a commit to the current transaction.
-        /// </summary>
-        /// <param name="sender">The object that triggered the event</param>
-        /// <param name="e">Any event arguments</param>
-        /// <remarks>
-        /// EasyObjects can't perform an <see cref="AcceptChanges"/> on the internal DataTable until the TransactionManager
-        /// is ready to commit the current transaction. Because there may be many objects in a single transaction, this event
-        /// is setup to receive notification when the TransactionManager is ready for the commit. EasyObjects then calls the
-        /// <see cref="AcceptChanges"/> method so that the internal DataTable properly reflects the current state of the data.
-        /// </remarks>
-        private void txMgr_TransactionCommitted(object sender, EventArgs e)
-        {
-            // Reset the internal DataTable
-            this.AcceptChanges();
-
-            // Unsubscribe from the event
-            TransactionManager txMgr = TransactionManager.ThreadTransactionMgr();
-            txMgr.TransactionCommitted -= new TransactionManager.TransactionCommittedDelegate(this.txMgr_TransactionCommitted);
-        }
-
-        #region LoadFrom methods
         /// <summary>
         /// <para>Load the EasyObject with the results from a SQL query or stored procedure.</para>
         /// </summary>
@@ -679,24 +630,24 @@ namespace NCI.EasyObjects
         /// <returns>A boolean value indicating success or failure</returns>
         protected bool LoadFromSql(string sp, ListDictionary parameters, CommandType commandType)
         {
-            //  Create the Database object, using the default database service. The
-            //  default database service is determined through configuration.
-            Database db = GetDatabase();
-            string sqlCommand = sp;
-            DbCommand dbCommand;
-            if (commandType == CommandType.StoredProcedure)
+            DbCommand dbCommand = new SqlCommand
             {
-                dbCommand = db.GetStoredProcCommand(sqlCommand);
-            }
-            else
-            {
-                dbCommand = db.GetSqlStringCommand(sqlCommand);
-            }
+                CommandType = commandType,
+                CommandText = sp,
+                CommandTimeout = CommandTimeout > 0 ? CommandTimeout : 0
+            };
+
             if (parameters != null)
             {
                 foreach (DictionaryEntry param in parameters)
                 {
-                    db.AddInParameter(dbCommand, param.Key.ToString(), GetDbType(param.Value.GetType()), param.Value);
+                    var p = dbCommand.CreateParameter();
+                    p.ParameterName = param.Key.ToString();
+                    p.DbType = GetDbType(param.Value.GetType());
+                    p.Value = param.Value;
+                    p.SourceVersion = DataRowVersion.Default;
+                    p.Direction = ParameterDirection.Input;
+                    dbCommand.Parameters.Add(p);
                 }
             }
 
@@ -721,31 +672,25 @@ namespace NCI.EasyObjects
         /// <returns>A boolean value indicating success or failure</returns>
         protected bool LoadFromSql(DbCommand dbCommand)
         {
+            DataTable dataTable = null;
             bool loaded = false;
 
-            TransactionManager txMgr = TransactionManager.ThreadTransactionMgr();
-
-            dbCommand.CommandTimeout = this.CommandTimeout;
+            dbCommand.CommandTimeout = CommandTimeout > 0 ? CommandTimeout : 0;
 
             try
             {
-                //  Create the Database object, using the default database service. The
-                //  default database service is determined through configuration.
-                Database db = GetDatabase();
-                DbTransaction tx = txMgr.GetTransaction(db);
-                DataSet ds;
+                using (var con = new SqlConnection(this.ConnectionString))
+                {
+                    dbCommand.Connection = con;
 
-                if (tx == null)
-                {
-                    ds = db.ExecuteDataSet(dbCommand);
-                }
-                else
-                {
-                    ds = db.ExecuteDataSet(dbCommand, tx);
+                    using (var adapter = new SqlDataAdapter((SqlCommand)dbCommand))
+                    {
+                        adapter.Fill(dataTable);
+                    }
                 }
 
-                // Load the object from the dataset
-                Load(ds);
+                // Load the object from the dataTable
+                Load(dataTable);
             }
             catch (Exception ex)
             {
@@ -799,28 +744,24 @@ namespace NCI.EasyObjects
         /// <param name="commandTimeout">The command timeout value, 0 for infinite</param>
         protected void LoadFromSqlNoExec(string sp, ListDictionary parameters, CommandType commandType, int commandTimeout)
         {
-            //  Create the Database object, using the default database service. The
-            //  default database service is determined through configuration.
-            Database db = GetDatabase();
-            string sqlCommand = sp;
-            DbCommand dbCommand;
-            if (commandType == CommandType.StoredProcedure)
+            DbCommand dbCommand = new SqlCommand
             {
-                dbCommand = db.GetStoredProcCommand(sqlCommand);
-            }
-            else
-            {
-                dbCommand = db.GetSqlStringCommand(sqlCommand);
-            }
-            if (commandTimeout >= 0)
-            {
-                dbCommand.CommandTimeout = commandTimeout;
-            }
+                CommandType = commandType,
+                CommandText = sp,
+                CommandTimeout = commandTimeout > 0 ? commandTimeout : 0
+            };
+
             if (parameters != null)
             {
                 foreach (DictionaryEntry param in parameters)
                 {
-                    db.AddInParameter(dbCommand, param.Key.ToString(), GetDbType(param.Value.GetType()), param.Value);
+                    var p = dbCommand.CreateParameter();
+                    p.ParameterName = param.Key.ToString();
+                    p.DbType = GetDbType(param.Value.GetType());
+                    p.Value = param.Value;
+                    p.SourceVersion = DataRowVersion.Default;
+                    p.Direction = ParameterDirection.Input;
+                    dbCommand.Parameters.Add(p);
                 }
             }
 
@@ -833,22 +774,12 @@ namespace NCI.EasyObjects
         /// <param name="dbCommand">The command wrapper to use when calling ExecuteNonQuery.</param>
         protected void LoadFromSqlNoExec(DbCommand dbCommand)
         {
-            TransactionManager txMgr = TransactionManager.ThreadTransactionMgr();
-
             try
             {
-                //  Create the Database object, using the default database service. The
-                //  default database service is determined through configuration.
-                Database db = GetDatabase();
-                DbTransaction tx = txMgr.GetTransaction(db);
-
-                if (tx == null)
+                using (var con = new SqlConnection(this.ConnectionString))
                 {
-                    db.ExecuteNonQuery(dbCommand);
-                }
-                else
-                {
-                    db.ExecuteNonQuery(dbCommand, tx);
+                    dbCommand.Connection = con;
+                    dbCommand.ExecuteNonQuery();
                 }
             }
             catch (Exception ex)
@@ -900,29 +831,24 @@ namespace NCI.EasyObjects
         /// <returns>An object value from the database Command</returns>
         protected object LoadFromSqlScalar(string sp, ListDictionary parameters, CommandType commandType, int commandTimeout)
         {
-            //  Create the Database object, using the default database service. The
-            //  default database service is determined through configuration.
-            Database db = GetDatabase();
-            string sqlCommand = sp;
-            DbCommand dbCommand;
+            DbCommand dbCommand = new SqlCommand
+            {
+                CommandType = commandType,
+                CommandText = sp,
+                CommandTimeout = commandTimeout > 0 ? commandTimeout : 0
+            };
 
-            if (commandType == CommandType.StoredProcedure)
-            {
-                dbCommand = db.GetStoredProcCommand(sqlCommand);
-            }
-            else
-            {
-                dbCommand = db.GetSqlStringCommand(sqlCommand);
-            }
-            if (commandTimeout >= 0)
-            {
-                dbCommand.CommandTimeout = commandTimeout;
-            }
             if (parameters != null)
             {
                 foreach (DictionaryEntry param in parameters)
                 {
-                    db.AddInParameter(dbCommand, param.Key.ToString(), GetDbType(param.Value.GetType()), param.Value);
+                    var p = dbCommand.CreateParameter();
+                    p.ParameterName = param.Key.ToString();
+                    p.DbType = GetDbType(param.Value.GetType());
+                    p.Value = param.Value;
+                    p.SourceVersion = DataRowVersion.Default;
+                    p.Direction = ParameterDirection.Input;
+                    dbCommand.Parameters.Add(p);
                 }
             }
 
@@ -938,22 +864,12 @@ namespace NCI.EasyObjects
         {
             object rc = 0;
 
-            TransactionManager txMgr = TransactionManager.ThreadTransactionMgr();
-
             try
             {
-                //  Create the Database object, using the default database service. The
-                //  default database service is determined through configuration.
-                Database db = GetDatabase();
-                DbTransaction tx = txMgr.GetTransaction(db);
-
-                if (tx == null)
+                using (var con = new SqlConnection(this.ConnectionString))
                 {
-                    rc = db.ExecuteScalar(dbCommand);
-                }
-                else
-                {
-                    rc = db.ExecuteScalar(dbCommand, tx);
+                    dbCommand.Connection = con;
+                    rc = dbCommand.ExecuteScalar();
                 }
             }
             catch (Exception ex)
@@ -1007,29 +923,24 @@ namespace NCI.EasyObjects
         /// <returns>An object value from the database Command</returns>
         protected IDataReader LoadFromSqlReader(string sp, ListDictionary parameters, CommandType commandType, int commandTimeout)
         {
-            //  Create the Database object, using the default database service. The
-            //  default database service is determined through configuration.
-            Database db = GetDatabase();
-            string sqlCommand = sp;
-            DbCommand dbCommand;
+            DbCommand dbCommand = new SqlCommand
+            {
+                CommandType = commandType,
+                CommandText = sp,
+                CommandTimeout = commandTimeout > 0 ? commandTimeout : 0
+            };
 
-            if (commandType == CommandType.StoredProcedure)
-            {
-                dbCommand = db.GetStoredProcCommand(sqlCommand);
-            }
-            else
-            {
-                dbCommand = db.GetSqlStringCommand(sqlCommand);
-            }
-            if (commandTimeout >= 0)
-            {
-                dbCommand.CommandTimeout = commandTimeout;
-            }
             if (parameters != null)
             {
                 foreach (DictionaryEntry param in parameters)
                 {
-                    db.AddInParameter(dbCommand, param.Key.ToString(), GetDbType(param.Value.GetType()), param.Value);
+                    var p = dbCommand.CreateParameter();
+                    p.ParameterName = param.Key.ToString();
+                    p.DbType = GetDbType(param.Value.GetType());
+                    p.Value = param.Value;
+                    p.SourceVersion = DataRowVersion.Default;
+                    p.Direction = ParameterDirection.Input;
+                    dbCommand.Parameters.Add(p);
                 }
             }
 
@@ -1045,22 +956,12 @@ namespace NCI.EasyObjects
         {
             IDataReader rc = null;
 
-            TransactionManager txMgr = TransactionManager.ThreadTransactionMgr();
-
             try
             {
-                //  Create the Database object, using the default database service. The
-                //  default database service is determined through configuration.
-                Database db = GetDatabase();
-                DbTransaction tx = txMgr.GetTransaction(db);
-
-                if (tx == null)
+                using (var con = new SqlConnection(this.ConnectionString))
                 {
-                    rc = db.ExecuteReader(dbCommand);
-                }
-                else
-                {
-                    rc = db.ExecuteReader(dbCommand, tx);
+                    dbCommand.Connection = con;
+                    rc = dbCommand.ExecuteReader();
                 }
             }
             catch (Exception ex)
@@ -1070,7 +971,6 @@ namespace NCI.EasyObjects
 
             return rc;
         }
-        #endregion
 
         /// <summary>
         /// <para>Maps a system type to a DbType enumeration.</para>
@@ -1128,14 +1028,6 @@ namespace NCI.EasyObjects
         /// </remarks>
         protected virtual void PreSave()
         {
-            // Justified string functionality has been depricated for now
-            //			foreach (SchemaItem item in this.SchemaEntries) 
-            //			{
-            //				if ((item.Justify != SchemaItemJustify.None)) 
-            //				{
-            //					SetString(item.FieldName, GetString(item.FieldName), item.Justify, item.Length);
-            //				}
-            //			}
         }
 
         /// <summary>
@@ -1144,65 +1036,6 @@ namespace NCI.EasyObjects
         /// <remarks>This function has been deprecated and should not be used. It's a remnant of some old code.</remarks>
         protected virtual void PostSave(IDataParameterCollection ps)
         {
-        }
-
-        /// <summary>
-        /// <para>Get the database defined in the configuration file.</para>
-        /// </summary>
-        /// <remarks>If no instance name is specified in DatabaseInstanceName, the default instance is returned.</remarks>
-        /// <returns>A reference to a Database object.</returns>
-        public Database GetDatabase()
-        {
-            string instanceName = this.DatabaseInstanceName.Length == 0 ? "__default" : this.DatabaseInstanceName;
-
-            // Retrieve the database instance from the cache
-            Database db = ((Database)(_databases[instanceName]));
-
-            // If none found in the cache, create a new instance
-            // and store it in the cache
-            if (db == null)
-            {
-                if (this.ConnectionString.Length == 0)
-                {
-                    if (this.ConnectionServer.Length == 0)
-                    {
-                        // No dynamic connection information is present, so use the 
-                        // settings from dataConfiguration.config file
-                        if (this.DatabaseInstanceName.Length == 0)
-                        {
-                            db = DatabaseFactory.CreateDatabase();
-                        }
-                        else
-                        {
-                            db = DatabaseFactory.CreateDatabase(instanceName);
-                        }
-                    }
-                    else
-                    {
-                        // A server was specified, so use the other related properties
-                        // to create a dynamic connection
-                        //db = this.UseIntegratedSecurity ? 
-                        //    DynamicDatabaseFactory.CreateDatabase(instanceName, this.ConnectionServer, this.ConnectionDatabase, this.DBProviderType) :
-                        //    DynamicDatabaseFactory.CreateDatabase(instanceName, this.ConnectionServer, this.ConnectionDatabase, this.ConnectionUserID, this.ConnectionPassword, this.DBProviderType);
-                    }
-                }
-                else
-                {
-                    // A complete connection string was specified. The UserID and Password
-                    // may be specified in the connection string, or can be set separately by
-                    // the ConnectionUserID and ConnectionPassword properties to facilitate
-                    // prompting from the user.
-                    //db = this.UseIntegratedSecurity || this.ConnectionUserID.Length == 0 ? 
-                    //    DynamicDatabaseFactory.CreateDatabaseFromConnectString(instanceName, this.ConnectionString, this.DBProviderType) :
-                    //    DynamicDatabaseFactory.CreateDatabaseFromConnectString(instanceName, this.ConnectionString, this.ConnectionUserID, this.ConnectionPassword, this.DBProviderType);
-                    db = new Microsoft.Practices.EnterpriseLibrary.Data.Sql.SqlDatabase(this.ConnectionString);
-                }
-
-                // Store the new instance in the cache
-                _databases[instanceName] = db;
-            }
-
-            return db;
         }
 
         /// <summary>
@@ -2944,16 +2777,7 @@ namespace NCI.EasyObjects
             {
                 if (_query == null)
                 {
-                    //  If the object was given the name of a dynamic query instance, then create
-                    //  that instance. Otherwise, use the default instance.
-                    if (this.DynamicQueryInstanceName == string.Empty)
-                    {
-                        _query = DynamicQueryFactory.CreateDynamicQuery(this);
-                    }
-                    else
-                    {
-                        _query = DynamicQueryFactory.CreateDynamicQuery(this, this.DynamicQueryInstanceName);
-                    }
+                    _query = new DynamicQueryProvider.SqlServerDynamicQuery();
                 }
 
                 return _query;
