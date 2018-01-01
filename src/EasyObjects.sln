@@ -5,6 +5,8 @@ VisualStudioVersion = 15.0.27130.2010
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EasyObjects", "EasyObjects\EasyObjects.csproj", "{F39AF67B-05A4-47AC-99FA-9BBD6EFB3E9E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EasyObjects.Tests", "EasyObjects.Tests\EasyObjects.Tests.csproj", "{2EE508C8-D46D-4BFA-96C2-5259181AC554}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{F39AF67B-05A4-47AC-99FA-9BBD6EFB3E9E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F39AF67B-05A4-47AC-99FA-9BBD6EFB3E9E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F39AF67B-05A4-47AC-99FA-9BBD6EFB3E9E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2EE508C8-D46D-4BFA-96C2-5259181AC554}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2EE508C8-D46D-4BFA-96C2-5259181AC554}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2EE508C8-D46D-4BFA-96C2-5259181AC554}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2EE508C8-D46D-4BFA-96C2-5259181AC554}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
