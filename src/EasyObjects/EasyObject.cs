@@ -18,9 +18,6 @@ using System.Collections.Specialized;
 using System.Data;
 using System.Data.Common;
 using System.Data.SqlClient;
-using System.IO;
-using System.Reflection;
-using System.Xml.Serialization;
 
 namespace NCI.EasyObjects
 {
@@ -29,8 +26,6 @@ namespace NCI.EasyObjects
     /// </summary>
     public abstract class EasyObject
     {
-        static object _dbNull = null;
-
         // Internal error status variables
         int _errorCode = 0;
         string _errorMessage = String.Empty;
@@ -43,7 +38,7 @@ namespace NCI.EasyObjects
         IDbTransaction _tx = null;
 
         // Internal schema entry variable
-        ArrayList _schemaEntries;
+        List<SchemaItem> _schemaEntries;
 
         // Instance name variables, from Enterprise Library configuration files
         string _databaseInstanceName = string.Empty;
@@ -84,7 +79,10 @@ namespace NCI.EasyObjects
         /// <summary>
         /// The default constructor.
         /// </summary>  
-        public EasyObject() { }
+        public EasyObject() : this(new DynamicQueryProvider.SqlServerDynamicQuery())
+        { }
+
+        public EasyObject(DynamicQuery queryProvider) { }
 
         /// <summary>
         /// <para>Loads the internal DataTable with values from database Output parameters.</para>
@@ -101,41 +99,6 @@ namespace NCI.EasyObjects
                 }
             }
             _dataRow.AcceptChanges();
-        }
-
-        /// <summary>
-        /// <para>Loads the internal DataTable with the first table in a DataSet.</para>
-        /// </summary>
-        /// <param name="ds">The DataSet from which to extract the DataTable</param>
-        public virtual void Load(DataSet ds)
-        {
-            Load(ds, ds.Tables[0].TableName);
-        }
-
-        /// <summary>
-        /// <para>Loads the internal DataTable with the specified table index in a DataSet.</para>
-        /// </summary>
-        /// <param name="ds">The DataSet from which to extract the DataTable</param>
-        /// <param name="tableIndex">The index of the table in the DataSet</param>
-        public virtual void Load(DataSet ds, int tableIndex)
-        {
-            Load(ds, ds.Tables[tableIndex].TableName);
-        }
-
-        /// <summary>
-        /// <para>Loads the internal DataTable with the named table in a DataSet.</para>
-        /// </summary>
-        /// <param name="ds">The DataSet from which to extract the DataTable</param>
-        /// <param name="tableName">The name of the table in the DataSet</param>
-        public virtual void Load(DataSet ds, string tableName)
-        {
-            DataTable dt = ds.Tables[tableName];
-
-            //  Remove the table from the dataset
-            ds.Tables.Remove(dt);
-
-            //  Load using the DataTable
-            Load(dt);
         }
 
         /// <summary>
@@ -641,17 +604,190 @@ namespace NCI.EasyObjects
             {
                 foreach (DictionaryEntry param in parameters)
                 {
-                    var p = dbCommand.CreateParameter();
-                    p.ParameterName = param.Key.ToString();
-                    p.DbType = GetDbType(param.Value.GetType());
-                    p.Value = param.Value;
-                    p.SourceVersion = DataRowVersion.Default;
-                    p.Direction = ParameterDirection.Input;
-                    dbCommand.Parameters.Add(p);
+                    AddInParameter(dbCommand, param.Key.ToString(), GetDbType(param.Value.GetType()), param.Value);
                 }
             }
 
             return LoadFromSql(dbCommand);
+        }
+
+        /// <summary>
+        /// Adds a new In <see cref="DbParameter"/> object to the given <paramref name="command"/>.
+        /// </summary>
+        /// <param name="command">The command to add the in parameter.</param>
+        /// <param name="name"><para>The name of the parameter.</para></param>
+        /// <param name="dbType"><para>One of the <see cref="DbType"/> values.</para></param>                
+        /// <remarks>
+        /// <para>This version of the method is used when you can have the same parameter object multiple times with different values.</para>
+        /// </remarks>        
+        public void AddInParameter(DbCommand command,
+                                   string name,
+                                   DbType dbType)
+        {
+            AddParameter(command, name, dbType, ParameterDirection.Input, String.Empty, DataRowVersion.Default, null);
+        }
+
+        /// <summary>
+        /// Adds a new In <see cref="DbParameter"/> object to the given <paramref name="command"/>.
+        /// </summary>
+        /// <param name="command">The commmand to add the parameter.</param>
+        /// <param name="name"><para>The name of the parameter.</para></param>
+        /// <param name="dbType"><para>One of the <see cref="DbType"/> values.</para></param>                
+        /// <param name="value"><para>The value of the parameter.</para></param>      
+        public void AddInParameter(DbCommand command,
+                                   string name,
+                                   DbType dbType,
+                                   object value)
+        {
+            AddParameter(command, name, dbType, ParameterDirection.Input, String.Empty, DataRowVersion.Default, value);
+        }
+
+        /// <summary>
+        /// Adds a new In <see cref="DbParameter"/> object to the given <paramref name="command"/>.
+        /// </summary>
+        /// <param name="command">The command to add the parameter.</param>
+        /// <param name="name"><para>The name of the parameter.</para></param>
+        /// <param name="dbType"><para>One of the <see cref="DbType"/> values.</para></param>                
+        /// <param name="sourceColumn"><para>The name of the source column mapped to the DataSet and used for loading or returning the value.</para></param>
+        /// <param name="sourceVersion"><para>One of the <see cref="DataRowVersion"/> values.</para></param>
+        public void AddInParameter(DbCommand command,
+                                   string name,
+                                   DbType dbType,
+                                   string sourceColumn,
+                                   DataRowVersion sourceVersion)
+        {
+            AddParameter(command, name, dbType, 0, ParameterDirection.Input, true, 0, 0, sourceColumn, sourceVersion, null);
+        }
+
+        /// <summary>
+        /// <para>Adds a new instance of a <see cref="DbParameter"/> object to the command.</para>
+        /// </summary>
+        /// <param name="command">The command to add the parameter.</param>
+        /// <param name="name"><para>The name of the parameter.</para></param>
+        /// <param name="dbType"><para>One of the <see cref="DbType"/> values.</para></param>        
+        /// <param name="direction"><para>One of the <see cref="ParameterDirection"/> values.</para></param>                
+        /// <param name="sourceColumn"><para>The name of the source column mapped to the DataSet and used for loading or returning the <paramref name="value"/>.</para></param>
+        /// <param name="sourceVersion"><para>One of the <see cref="DataRowVersion"/> values.</para></param>
+        /// <param name="value"><para>The value of the parameter.</para></param>    
+        protected virtual void AddParameter(DbCommand command,
+                                 string name,
+                                 DbType dbType,
+                                 ParameterDirection direction,
+                                 string sourceColumn,
+                                 DataRowVersion sourceVersion,
+                                 object value)
+        {
+            AddParameter(command, name, dbType, 0, direction, false, 0, 0, sourceColumn, sourceVersion, value);
+        }
+
+        /// <summary>
+        /// Adds a new In <see cref="DbParameter"/> object to the given <paramref name="command"/>.
+        /// </summary>
+        /// <param name="command">The command to add the parameter.</param>
+        /// <param name="name"><para>The name of the parameter.</para></param>
+        /// <param name="dbType"><para>One of the <see cref="DbType"/> values.</para></param>
+        /// <param name="size"><para>The maximum size of the data within the column.</para></param>
+        /// <param name="direction"><para>One of the <see cref="ParameterDirection"/> values.</para></param>
+        /// <param name="nullable"><para>Avalue indicating whether the parameter accepts <see langword="null"/> (<b>Nothing</b> in Visual Basic) values.</para></param>
+        /// <param name="precision"><para>The maximum number of digits used to represent the <paramref name="value"/>.</para></param>
+        /// <param name="scale"><para>The number of decimal places to which <paramref name="value"/> is resolved.</para></param>
+        /// <param name="sourceColumn"><para>The name of the source column mapped to the DataSet and used for loading or returning the <paramref name="value"/>.</para></param>
+        /// <param name="sourceVersion"><para>One of the <see cref="DataRowVersion"/> values.</para></param>
+        /// <param name="value"><para>The value of the parameter.</para></param>       
+        protected virtual void AddParameter(DbCommand command,
+                                         string name,
+                                         DbType dbType,
+                                         int size,
+                                         ParameterDirection direction,
+                                         bool nullable,
+                                         byte precision,
+                                         byte scale,
+                                         string sourceColumn,
+                                         DataRowVersion sourceVersion,
+                                         object value)
+        {
+            if (command == null) throw new ArgumentNullException("command");
+
+            DbParameter parameter = CreateParameter(name, dbType, size, direction, nullable, precision, scale, sourceColumn, sourceVersion, value);
+            command.Parameters.Add(parameter);
+        }
+
+        /// <summary>
+        /// <para>Adds a new instance of a <see cref="DbParameter"/> object.</para>
+        /// </summary>
+        /// <param name="name"><para>The name of the parameter.</para></param>
+        /// <param name="dbType"><para>One of the <see cref="DbType"/> values.</para></param>
+        /// <param name="size"><para>The maximum size of the data within the column.</para></param>
+        /// <param name="direction"><para>One of the <see cref="ParameterDirection"/> values.</para></param>
+        /// <param name="nullable"><para>Avalue indicating whether the parameter accepts <see langword="null"/> (<b>Nothing</b> in Visual Basic) values.</para></param>
+        /// <param name="precision"><para>The maximum number of digits used to represent the <paramref name="value"/>.</para></param>
+        /// <param name="scale"><para>The number of decimal places to which <paramref name="value"/> is resolved.</para></param>
+        /// <param name="sourceColumn"><para>The name of the source column mapped to the DataSet and used for loading or returning the <paramref name="value"/>.</para></param>
+        /// <param name="sourceVersion"><para>One of the <see cref="DataRowVersion"/> values.</para></param>
+        /// <param name="value"><para>The value of the parameter.</para></param>  
+        /// <returns>A newly created <see cref="DbParameter"/> fully initialized with given parameters.</returns>
+        protected DbParameter CreateParameter(string name,
+                                              DbType dbType,
+                                              int size,
+                                              ParameterDirection direction,
+                                              bool nullable,
+                                              byte precision,
+                                              byte scale,
+                                              string sourceColumn,
+                                              DataRowVersion sourceVersion,
+                                              object value)
+        {
+            DbParameter param = CreateParameter(name);
+            ConfigureParameter(param, name, dbType, size, direction, nullable, precision, scale, sourceColumn, sourceVersion, value);
+            return param;
+        }
+
+        /// <summary>
+        /// <para>Adds a new instance of a <see cref="DbParameter"/> object.</para>
+        /// </summary>
+        /// <param name="name"><para>The name of the parameter.</para></param>
+        /// <returns><para>An unconfigured parameter.</para></returns>
+        protected DbParameter CreateParameter(string name)
+        {
+            return new SqlParameter
+            {
+                ParameterName = name
+            };
+        }
+
+        /// <summary>
+        /// Configures a given <see cref="DbParameter"/>.
+        /// </summary>
+        /// <param name="param">The <see cref="DbParameter"/> to configure.</param>
+        /// <param name="name"><para>The name of the parameter.</para></param>
+        /// <param name="dbType"><para>One of the <see cref="DbType"/> values.</para></param>
+        /// <param name="size"><para>The maximum size of the data within the column.</para></param>
+        /// <param name="direction"><para>One of the <see cref="ParameterDirection"/> values.</para></param>
+        /// <param name="nullable"><para>Avalue indicating whether the parameter accepts <see langword="null"/> (<b>Nothing</b> in Visual Basic) values.</para></param>
+        /// <param name="precision"><para>The maximum number of digits used to represent the <paramref name="value"/>.</para></param>
+        /// <param name="scale"><para>The number of decimal places to which <paramref name="value"/> is resolved.</para></param>
+        /// <param name="sourceColumn"><para>The name of the source column mapped to the DataSet and used for loading or returning the <paramref name="value"/>.</para></param>
+        /// <param name="sourceVersion"><para>One of the <see cref="DataRowVersion"/> values.</para></param>
+        /// <param name="value"><para>The value of the parameter.</para></param>  
+        protected virtual void ConfigureParameter(DbParameter param,
+                                                  string name,
+                                                  DbType dbType,
+                                                  int size,
+                                                  ParameterDirection direction,
+                                                  bool nullable,
+                                                  byte precision,
+                                                  byte scale,
+                                                  string sourceColumn,
+                                                  DataRowVersion sourceVersion,
+                                                  object value)
+        {
+            param.DbType = dbType;
+            param.Size = size;
+            param.Value = value ?? DBNull.Value;
+            param.Direction = direction;
+            param.IsNullable = nullable;
+            param.SourceColumn = sourceColumn;
+            param.SourceVersion = sourceVersion;
         }
 
         /// <summary>
@@ -755,13 +891,7 @@ namespace NCI.EasyObjects
             {
                 foreach (DictionaryEntry param in parameters)
                 {
-                    var p = dbCommand.CreateParameter();
-                    p.ParameterName = param.Key.ToString();
-                    p.DbType = GetDbType(param.Value.GetType());
-                    p.Value = param.Value;
-                    p.SourceVersion = DataRowVersion.Default;
-                    p.Direction = ParameterDirection.Input;
-                    dbCommand.Parameters.Add(p);
+                    AddInParameter(dbCommand, param.Key.ToString(), GetDbType(param.Value.GetType()), param.Value);
                 }
             }
 
@@ -842,13 +972,7 @@ namespace NCI.EasyObjects
             {
                 foreach (DictionaryEntry param in parameters)
                 {
-                    var p = dbCommand.CreateParameter();
-                    p.ParameterName = param.Key.ToString();
-                    p.DbType = GetDbType(param.Value.GetType());
-                    p.Value = param.Value;
-                    p.SourceVersion = DataRowVersion.Default;
-                    p.Direction = ParameterDirection.Input;
-                    dbCommand.Parameters.Add(p);
+                    AddInParameter(dbCommand, param.Key.ToString(), GetDbType(param.Value.GetType()), param.Value);
                 }
             }
 
@@ -934,13 +1058,7 @@ namespace NCI.EasyObjects
             {
                 foreach (DictionaryEntry param in parameters)
                 {
-                    var p = dbCommand.CreateParameter();
-                    p.ParameterName = param.Key.ToString();
-                    p.DbType = GetDbType(param.Value.GetType());
-                    p.Value = param.Value;
-                    p.SourceVersion = DataRowVersion.Default;
-                    p.Direction = ParameterDirection.Input;
-                    dbCommand.Parameters.Add(p);
+                    AddInParameter(dbCommand, param.Key.ToString(), GetDbType(param.Value.GetType()), param.Value);
                 }
             }
 
@@ -1156,56 +1274,6 @@ namespace NCI.EasyObjects
         {
         }
 
-        #region Reflection-based methods
-        /// <summary>
-        /// Retrieves the list of the object's properties using reflection and returns them in an array
-        /// </summary>
-        /// <returns>An ArrayList containing the names of the properties</returns>
-        public ArrayList GetProperties()
-        {
-            ArrayList props = new ArrayList();
-            PropertyInfo[] info = this.GetType().GetProperties();
-
-            foreach (PropertyInfo pi in info)
-            {
-                props.Add(pi.Name);
-            }
-
-            return props;
-        }
-
-        /// <summary>
-        /// Sets a property value using the property name via reflection
-        /// </summary>
-        /// <param name="propertyName">The name of the property to set</param>
-        /// <param name="propertyValue">The value to set the property to</param>
-        public void SetProperty(string propertyName, string propertyValue)
-        {
-            if (!propertyName.StartsWith("s_"))
-                throw new ArgumentException("Only 's_' property values can be set via this method");
-
-            Type userType = this.GetType();
-            PropertyInfo userProp = userType.GetProperty(propertyName);
-
-            userProp.SetValue(this, propertyValue, null);
-        }
-
-        /// <summary>
-        /// Retrieves the value of a property using the name via reflection
-        /// </summary>
-        /// <param name="propertyName">The name of the property to retrieve the value</param>
-        /// <returns>An object containing the property value</returns>
-        public object GetPropertyByNamedValue(string propertyName)
-        {
-            Type userType = this.GetType();
-            PropertyInfo userProp = userType.GetProperty(propertyName);
-
-            return userProp.GetValue(this, null);
-        }
-        #endregion
-
-        #region Get/Set datatype functions
-
         /// <summary>
         /// This is the typeless version, this method should only be used for columns that you added via <see cref="AddColumn"/> or to access
         /// extra columns brought back by changing your <see cref="QuerySource"/> to a SQL View.
@@ -1297,7 +1365,7 @@ namespace NCI.EasyObjects
         {
             if ((value.Trim() == String.Empty) && _convertEmptyStringToNull)
             {
-                _dataRow[fieldName] = EasyObject.DBNull;
+                _dataRow[fieldName] = DBNull.Value;
                 return;
             }
             switch (justify)
@@ -1682,9 +1750,7 @@ namespace NCI.EasyObjects
                 }
             }
         }
-        #endregion
 
-        #region String Row Accessors
         /// <summary>
         /// Used by the String Properties in your generated class. 
         /// </summary>
@@ -1937,7 +2003,6 @@ namespace NCI.EasyObjects
             return Convert.ToSingle(data);
         }
 
-
         /// <summary>
         /// Used by the String Properties in your generated class. 
         /// </summary>
@@ -2000,295 +2065,6 @@ namespace NCI.EasyObjects
         {
             return _dataRow[fieldName].ToString();
         }
-        #endregion
-
-        #region Serialization functions
-
-        /// <summary>
-        /// This method will allow you to save the contents of the EasyObject to XML.
-        /// It is saved as a DataSet with Schema, data, and Rowstate as a DiffGram.
-        /// You can load this data into another entity of the same type via <see cref="Deserialize"/>. 
-        /// Call <see cref="GetChanges()"/> before calling Serialize to serialize only the modified data.
-        /// </summary>
-        /// <returns>A string containing the XML</returns>
-        ///	<example>
-        ///	VB.NET
-        ///	<code>
-        ///	Dim emps As New Employees
-        /// emps.Query.Load()              ' emps.RowCount = 200
-        /// emps.FirstName = "Noonan"      ' Change first row
-        /// emps.GetChanges()              ' emps.RowCount now = 1 
-        /// Dim xml As String = emps.Serialize()
-        /// 
-        /// ' Now reload that single record into a new Employees object and Save it
-        /// Dim empsClone As New Employees
-        /// empsClone.Deserialize(xml)
-        /// empsClone.Save()
-        ///	</code>
-        ///	C#
-        /// <code>
-        /// Employees emps = new Employees();
-        /// emps.LoadAll();                // emps.RowCount = 200
-        /// emps.LastName = "Noonan";      // Change first row
-        /// emps.GetChanges();             // emps.RowCount now = 1 
-        /// string str = emps.Serialize();
-        /// 
-        /// // Now reload that single record into a new Employees object and Save it
-        /// Employees empsClone = new Employees();
-        /// empsClone.Deserialize(str);
-        /// empsClone.Save();
-        /// </code> 
-        ///	</example>
-        virtual public string Serialize()
-        {
-            DataSet dataSet = new DataSet();
-            dataSet.Tables.Add(_dataTable);
-            StringWriter writer = new StringWriter();
-            XmlSerializer ser = new XmlSerializer(typeof(DataSet));
-            ser.Serialize(writer, dataSet);
-            dataSet.Tables.Clear();
-            return writer.ToString();
-        }
-
-        /// <summary>
-        /// Reload an EasyObject from a previous call to <see cref="Serialize"/>.
-        /// </summary>
-        /// <param name="xml">The string containing the XML to reload</param>
-        ///	<example>
-        ///	VB.NET
-        ///	<code>
-        ///	Dim emps As New Employees
-        /// emps.Query.Load()              ' emps.RowCount = 200
-        /// emps.FirstName = "Noonan"      ' Change first row
-        /// emps.GetChanges()              ' emps.RowCount now = 1 
-        /// Dim xml As String = emps.Serialize()
-        /// 
-        /// ' Now reload that single record into a new Employees object and Save it
-        /// Dim empsClone As New Employees
-        /// empsClone.Deserialize(xml)
-        /// empsClone.Save()
-        ///	</code>
-        ///	C#
-        /// <code>
-        /// Employees emps = new Employees();
-        /// emps.LoadAll();                // emps.RowCount = 200
-        /// emps.LastName = "Noonan";      // Change first row
-        /// emps.GetChanges();             // emps.RowCount now = 1 
-        /// string str = emps.Serialize();
-        /// 
-        /// // Now reload that single record into a new Employees object and Save it
-        /// Employees empsClone = new Employees();
-        /// empsClone.Deserialize(str);
-        /// empsClone.Save();
-        /// </code> 
-        ///	</example>
-        virtual public void Deserialize(string xml)
-        {
-            DataSet dataSet = new DataSet();
-            StringReader reader = new StringReader(xml);
-            XmlSerializer ser = new XmlSerializer(typeof(DataSet));
-            dataSet = (DataSet)ser.Deserialize(reader);
-            this.DataTable = dataSet.Tables[0];
-            dataSet.Tables.Clear();
-        }
-
-        /// <summary>
-        /// This method will allow you to save the contents of the EasyObject to XML.
-        /// You can load this data into another EasyObject of the same type via <see cref="FromXml(string)"/>. 
-        /// Call <see cref="GetChanges()"/> before calling ToXml to serialize only the modified data.
-        /// </summary>
-        /// <returns>A string containing the XML</returns>
-        ///	<example>
-        ///	VB.NET
-        ///	<code>
-        ///	Dim emps As New Employees
-        /// emps.Query.Load()              ' emps.RowCount = 200
-        /// emps.FirstName = "Noonan"      ' Change first row
-        /// emps.GetChanges()              ' emps.RowCount now = 1 
-        /// 
-        /// ' Now reload that single record into a new Employees object and Save it
-        /// Dim xml As String = emps.ToXml()
-        /// Dim empsClone As New Employees
-        /// empsClone.FromXml(xml)
-        /// empsClone.Save()
-        ///	</code>
-        ///	C#
-        /// <code>
-        /// Employees emps = new Employees();
-        /// emps.LoadAll();                // emps.RowCount = 200
-        /// emps.LastName = "Noonan";      // Change first row
-        /// emps.GetChanges();             // emps.RowCount now = 1 
-        /// 
-        /// // Now reload that single record into a new Employees object and Save it
-        /// string str = emps.ToXml();
-        /// Employees empsClone = new Employees();
-        /// empsClone.FromXml(str);
-        /// empsClone.Save();
-        /// </code> 
-        ///	</example>
-        public string ToXml()
-        {
-            //  DataSet that will hold the returned results        
-            DataSet ds = new DataSet((this.TableName + "DataSet"));
-            //  Add the current instance to the dataset
-            // Me.DataTable.TableName = Me.TableName
-            ds.Tables.Add(this.DataTable);
-            //  Build the XML string
-            StringWriter writer = new StringWriter();
-            ds.WriteXml(writer);
-            //  Remove the table from the dataset
-            ds.Tables.Clear();
-            return writer.ToString();
-        }
-
-        /// <summary>
-        /// This method will allow you to save the contents of the EasyObject to XML.
-        /// You can load this data into another EasyObject of the same type via <see cref="FromXml(string)"/>. 
-        /// Call <see cref="GetChanges()"/> before calling ToXml to serialize only the modified data.
-        /// </summary>
-        /// <returns>A string containing the XML</returns>
-        ///	<example>
-        ///	VB.NET
-        ///	<code>
-        ///	Dim emps As New Employees
-        /// emps.Query.Load()              ' emps.RowCount = 200
-        /// emps.FirstName = "Noonan"      ' Change first row
-        /// emps.GetChanges()              ' emps.RowCount now = 1 
-        /// 
-        /// ' Now reload that single record into a new Employees object and Save it
-        /// Dim xml As String = emps.ToXml()
-        /// Dim empsClone As New Employees
-        /// empsClone.FromXml(xml)
-        /// empsClone.Save()
-        ///	</code>
-        ///	C#
-        /// <code>
-        /// Employees emps = new Employees();
-        /// emps.LoadAll();                // emps.RowCount = 200
-        /// emps.LastName = "Noonan";      // Change first row
-        /// emps.GetChanges();             // emps.RowCount now = 1 
-        /// 
-        /// // Now reload that single record into a new Employees object and Save it
-        /// string str = emps.ToXml();
-        /// Employees empsClone = new Employees();
-        /// empsClone.FromXml(str);
-        /// empsClone.Save();
-        /// </code> 
-        ///	</example>
-        public string ToXml(XmlWriteMode mode)
-        {
-            //  DataSet that will hold the returned results        
-            DataSet ds = new DataSet((this.TableName + "DataSet"));
-            //  Add the current instance to the dataset
-            // Me.DataTable.TableName = Me.TableName
-            ds.Tables.Add(this.DataTable);
-            //  Build the XML string
-            StringWriter writer = new StringWriter();
-            ds.WriteXml(writer, mode);
-            //  Remove the table from the dataset
-            ds.Tables.Clear();
-            return writer.ToString();
-        }
-
-        /// <summary>
-        /// Reload the EasyObject from a previous call to <see cref="ToXml()"/>.
-        /// </summary>
-        /// <param name="xml">The string to reload</param>
-        ///	<example>
-        ///	VB.NET
-        ///	<code>
-        ///	Dim emps As New Employees
-        /// emps.Query.Load()              ' emps.RowCount = 200
-        /// emps.FirstName = "Noonan"      ' Change first row
-        /// emps.GetChanges()              ' emps.RowCount now = 1 
-        /// 
-        /// ' Now reload that single record into a new Employees object and Save it
-        /// Dim xml As String = emps.ToXml()
-        /// Dim empsClone As New Employees
-        /// empsClone.FromXml(xml)
-        /// empsClone.Save()
-        ///	</code>
-        ///	C#
-        /// <code>
-        /// Employees emps = new Employees();
-        /// emps.LoadAll();                // emps.RowCount = 200
-        /// emps.LastName = "Noonan";      // Change first row
-        /// emps.GetChanges();             // emps.RowCount now = 1 
-        /// 
-        /// // Now reload that single record into a new Employees object and Save it
-        /// string str = emps.ToXml();
-        /// Employees empsClone = new Employees();
-        /// empsClone.FromXml(str);
-        /// empsClone.Save();
-        /// </code> 
-        ///	</example>
-        public virtual void FromXml(string xml)
-        {
-            DataSet ds = new DataSet();
-            StringReader reader = new StringReader(xml);
-            ds.ReadXml(reader);
-            Load(ds);
-        }
-
-        /// <summary>
-        /// Reload the EasyObject from a previous call to <see cref="ToXml()"/>. Use the mode
-        /// parameter for finer control.
-        /// </summary>
-        /// <param name="xml">The string to reload</param>
-        /// <param name="mode">See the .NET XmlReadMode enum for more help.</param>
-        ///	<example>
-        ///	VB.NET
-        ///	<code>
-        ///	Dim emps As New Employees
-        /// emps.Query.Load()              ' emps.RowCount = 200
-        /// emps.FirstName = "Noonan"      ' Change first row
-        /// emps.GetChanges()              ' emps.RowCount now = 1 
-        /// 
-        /// ' Now reload that single record into a new Employees object and Save it
-        /// Dim xml As String = emps.ToXml()
-        /// Dim empsClone As New Employees
-        /// empsClone.FromXml(xml)
-        /// empsClone.Save()
-        ///	</code>
-        ///	C#
-        /// <code>
-        /// Employees emps = new Employees();
-        /// emps.LoadAll();                // emps.RowCount = 200
-        /// emps.LastName = "Noonan";      // Change first row
-        /// emps.GetChanges();             // emps.RowCount now = 1 
-        /// 
-        /// // Now reload that single record into a new Employees object and Save it
-        /// string str = emps.ToXml();
-        /// Employees empsClone = new Employees();
-        /// empsClone.FromXml(str);
-        /// empsClone.Save();
-        /// </code> 
-        ///	</example>
-        virtual public void FromXml(string xml, XmlReadMode mode)
-        {
-            DataSet ds = new DataSet();
-            StringReader reader = new StringReader(xml);
-            ds.ReadXml(reader, mode);
-            Load(ds);
-        }
-
-        /// <summary>
-        /// Returns the current object's data as a DataSet
-        /// </summary>
-        /// <returns>A DataSet containing the current data</returns>
-        /// <remarks>
-        /// This will probably trash any internal DataTable handling by the EasyObject, so you should
-        /// dispose of the object immediately after calling this method.
-        /// </remarks>
-        public DataSet ToDataSet()
-        {
-            DataSet ds = new DataSet();
-            ds.Tables.Add(this.DataTable);
-            return ds;
-        }
-        #endregion
-
-        #region Properties
 
         /// <summary>
         /// A format string used for displaying date values
@@ -2452,22 +2228,6 @@ namespace NCI.EasyObjects
             set { _useIntegratedSecurity = value; }
         }
 
-
-        /// <summary>
-        /// Returns a cached reference to DBNull
-        /// </summary>
-        protected static object DBNull
-        {
-            get
-            {
-                if ((_dbNull == null))
-                {
-                    _dbNull = Convert.DBNull;
-                }
-                return _dbNull;
-            }
-        }
-
         /// <summary>
         /// Gets or sets the internal error code.
         /// </summary>
@@ -2590,7 +2350,7 @@ namespace NCI.EasyObjects
         /// Gets or sets a reference to the <see cref="SchemaEntries" /> for the EasyObject.
         /// </summary>
         /// <remarks>This is primarily set in the generated EasyObject class, but can be overridden in a derived class.</remarks>
-        public ArrayList SchemaEntries
+        public List<SchemaItem> SchemaEntries
         {
             get
             {
@@ -2828,6 +2588,5 @@ namespace NCI.EasyObjects
             get { return _defaultCommandType; }
             set { _defaultCommandType = value; }
         }
-        #endregion
     }
 }

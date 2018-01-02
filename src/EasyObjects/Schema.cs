@@ -11,33 +11,27 @@
 // FITNESS FOR A PARTICULAR PURPOSE.
 //===============================================================================
 
-using System;
-using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace NCI.EasyObjects
 {
-	/// <summary>
-	/// Represents a database Schema for an EasyObject.
-	/// </summary>
-	public abstract class Schema
-	{
-		/// <summary>
-		/// The default constructor
-		/// </summary>
-		public Schema() {}
+    /// <summary>
+    /// Represents a database Schema for an EasyObject.
+    /// </summary>
+    public abstract class Schema
+    {
+        /// <summary>
+        /// The default constructor
+        /// </summary>
+        public Schema() { }
 
-		/// <summary>
-		/// An internal collection of <see cref="SchemaEntries"/>.
-		/// <seealso cref="SchemaEntries"/>
-		/// </summary>
-		/// <remarks>Used in derived classes.</remarks>
-		public virtual ArrayList SchemaEntries 
-		{
-			get 
-			{
-				return null;
-			}
-		}
+        /// <summary>
+        /// An internal collection of <see cref="SchemaEntries"/>.
+        /// <seealso cref="SchemaEntries"/>
+        /// </summary>
+        /// <remarks>Used in derived classes.</remarks>
+        public virtual List<SchemaItem> SchemaEntries { get => null; }
 
         /// <summary>
         /// Searches through the current <see cref="SchemaEntries"/> for a matching column
@@ -46,19 +40,7 @@ namespace NCI.EasyObjects
         /// <returns>A SchemaItem that matches the columnName, or null for no matches</returns>
         public virtual SchemaItem FindSchemaItem(string columnName)
         {
-            if (this.SchemaEntries.Count == 0)
-                return null;
-
-            for (int i = 0; i < this.SchemaEntries.Count; i++)
-            {
-                SchemaItem si = (SchemaItem)this.SchemaEntries[i];
-                if (si.FieldName == columnName)
-                {
-                    return si;
-                }
-            }
-
-            return null;
+            return this.SchemaEntries.SingleOrDefault(si => si.FieldName == columnName);
         }
     }
 }

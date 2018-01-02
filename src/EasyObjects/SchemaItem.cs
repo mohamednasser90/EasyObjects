@@ -11,10 +11,8 @@
 // FITNESS FOR A PARTICULAR PURPOSE.
 //===============================================================================
 
-using System;
-using System.Data;
 using System.Collections;
-using System.Runtime.Serialization;
+using System.Data;
 
 namespace NCI.EasyObjects
 {
