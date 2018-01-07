@@ -190,7 +190,13 @@ namespace NCI.EasyObjects.DynamicQueryProvider
 
             if (selectAll)
             {
-                query.Append("*");
+                foreach (var entry in this._entity.SchemaEntries)
+                {
+                    query.AppendFormat(this.FieldFormat, entry.FieldName);
+                    query.Append(", ");
+                }
+
+                query.Length -= 2;
             }
 
             query.AppendFormat(" FROM {0}", this.QuerySourceWithSchema);

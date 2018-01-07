@@ -2537,7 +2537,7 @@ namespace NCI.EasyObjects
             {
                 if (_query == null)
                 {
-                    _query = new DynamicQueryProvider.SqlServerDynamicQuery();
+                    _query = new DynamicQueryProvider.SqlServerDynamicQuery(this);
                 }
 
                 return _query;

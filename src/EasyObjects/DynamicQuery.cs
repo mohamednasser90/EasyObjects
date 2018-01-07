@@ -523,6 +523,7 @@ namespace NCI.EasyObjects
                 using (var con = new SqlConnection(this._entity.ConnectionString))
                 {
                     dbCommand.Connection = con;
+                    dataTable = new DataTable(this._tableName);
 
                     using (var adapter = new SqlDataAdapter((SqlCommand)dbCommand))
                     {
