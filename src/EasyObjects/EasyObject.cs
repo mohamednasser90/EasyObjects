@@ -230,8 +230,11 @@ namespace NCI.EasyObjects
                     if (item.IsInPrimaryKey)
                     {
                         DataColumn col = _dataTable.Columns[item.FieldName];
-                        col.AutoIncrement = item.IsAutoKey;
-                        this.PrimaryKeys.Add(col);
+                        if (col != null)
+                        {
+                            col.AutoIncrement = item.IsAutoKey;
+                            this.PrimaryKeys.Add(col);
+                        }
                     }
                 }
             }
@@ -505,17 +508,19 @@ namespace NCI.EasyObjects
                 {
                     IDbDataAdapter da = new SqlDataAdapter();
 
-                    if (needToInsert) { da.InsertCommand = GetInsertCommand(commandType); }
-                    if (needToUpdate) { da.UpdateCommand = GetUpdateCommand(commandType); }
-                    if (needToDelete) { da.DeleteCommand = GetDeleteCommand(commandType); }
+                    using (var con = new SqlConnection(this.ConnectionString))
+                    {
+                        if (needToInsert) { da.InsertCommand = GetInsertCommand(commandType); da.InsertCommand.Connection = con; }
+                        if (needToUpdate) { da.UpdateCommand = GetUpdateCommand(commandType); da.UpdateCommand.Connection = con; }
+                        if (needToDelete) { da.DeleteCommand = GetDeleteCommand(commandType); da.DeleteCommand.Connection = con; }
 
+                        DbDataAdapter dbDataAdapter = da as DbDataAdapter;
 
-                    DbDataAdapter dbDataAdapter = da as DbDataAdapter;
+                        // Perform the update
+                        dbDataAdapter.Update(_dataTable);
 
-                    // Perform the update
-                    dbDataAdapter.Update(_dataTable);
-
-                    this.AcceptChanges();
+                        this.AcceptChanges();
+                    }
                 }
             }
             catch (Exception)
