@@ -260,8 +260,7 @@ using System.Data.SqlClient;
 		output.WriteLn "using System.Runtime.Serialization;"
 		output.WriteLn "using System.Collections.Generic;"
 	End If
-%>
-using NCI.EasyObjects;
+%>using NCI.EasyObjects;
 
 namespace <%= TrimSpaces(namespace) %>
 {
@@ -297,7 +296,7 @@ namespace <%= TrimSpaces(namespace) %>
 				{
                     _entries = new List<SchemaItem>
                     {
-<%	output.tabLevel = 5
+<%	output.tabLevel = 6
 	hasAutoKey = False
 	hasRowID = False
 	'tableAlias = TrimSpaces(objTable.Alias)
@@ -326,7 +325,9 @@ namespace <%= TrimSpaces(namespace) %>
 			hasRowID = True
 		End If
 	Next
-%>				}
+%>					};
+				}
+
 				return _entries;
 			}
 		}
@@ -376,16 +377,16 @@ namespace <%= TrimSpaces(namespace) %>
 			switch(this.DefaultCommandType)
 			{
 				case CommandType.StoredProcedure:
-					ListDictionary parameters = new ListDictionary();
-
-					// Add in parameters
-<%		output.tabLevel = 5
+					ListDictionary parameters = new ListDictionary
+					{
+<%		output.tabLevel = 6
 		For Each objColumn in objTable.PrimaryKeys
 			name = GetName(objColumn)
 			alias = GetAlias(objColumn)
-			output.autoTabLn "parameters.Add(" & tableAlias & "Schema." & alias & ".FieldName, " & alias & ");"
+			output.autoTabLn "{ " & tableAlias & "Schema." & alias & ".FieldName, " & alias & " },"
 		Next
-%>
+%>					};
+
 					return base.LoadFromSql(this.SchemaStoredProcedureWithSeparator + "<%= CreateProcedureName(objTable, "K") %>", parameters, CommandType.StoredProcedure);
 
 				case CommandType.Text:
@@ -473,15 +474,16 @@ namespace <%= TrimSpaces(namespace) %>
 		{	
 			DbCommand dbCommand;
 
-			// Create the Database object, using the default database service. The
-			// default database service is determined through configuration.
-			Database db = GetDatabase();
-
 			switch(commandType)
 			{
 				case CommandType.StoredProcedure:
 					string sqlCommand = this.SchemaStoredProcedureWithSeparator + "<%= CreateProcedureName(objTable, "I") %>";
-					dbCommand = db.GetStoredProcCommand(sqlCommand);
+                    dbCommand = new SqlCommand
+                    {
+                        CommandType = CommandType.StoredProcedure,
+                        CommandText = sqlCommand,
+                        CommandTimeout = CommandTimeout > 0 ? CommandTimeout : 0
+                    };
 
 <%		output.tabLevel = 5
 		For Each objColumn in objTable.PrimaryKeys
@@ -494,10 +496,10 @@ namespace <%= TrimSpaces(namespace) %>
 			If isAutoKey Then
 				name = GetActualName(objColumn)
 				alias = GetAlias(objColumn)
-				output.autoTabLn "db.AddParameter(dbCommand, """ & name & """, " & objColumn.DbTargetType & ", " & objColumn.CharacterMaxLength & ", ParameterDirection.Output, true, 0, 0, """ & name & """, DataRowVersion.Default, Convert.DBNull);"
+				output.autoTabLn "base.AddParameter(dbCommand, """ & name & """, " & objColumn.DbTargetType & ", " & objColumn.CharacterMaxLength & ", ParameterDirection.Output, true, 0, 0, """ & name & """, DataRowVersion.Default, Convert.DBNull);"
 			End If
 		Next
-%>					CreateParameters(db, dbCommand);
+%>					CreateParameters(dbCommand);
 					
 					return dbCommand;
 
@@ -530,7 +532,7 @@ namespace <%= TrimSpaces(namespace) %>
 			If isAutoKey Then
 				name = objColumn.Name
 				alias = GetAlias(objColumn)
-				output.autoTabLn "db.AddInParameter(dbCommand, """ & alias & """, " & objColumn.DbTargetType & ", """ & name & """, DataRowVersion.Default);"
+				output.autoTabLn "base.AddInParameter(dbCommand, """ & alias & """, " & objColumn.DbTargetType & ", """ & name & """, DataRowVersion.Default);"
 			End If
 		Next
 %>					}
@@ -549,11 +551,11 @@ namespace <%= TrimSpaces(namespace) %>
 			If isAutoKey Then
 				name = GetActualName(objColumn)
 				alias = GetAlias(objColumn)
-				output.autoTabLn "db.AddParameter(dbCommand, """ & name & """, " & objColumn.DbTargetType & ", " & objColumn.CharacterMaxLength & ", ParameterDirection." & inputOutput & ", true, 0, 0, """ & name & """, DataRowVersion.Default, Convert.DBNull);"
+				output.autoTabLn "base.AddParameter(dbCommand, """ & name & """, " & objColumn.DbTargetType & ", " & objColumn.CharacterMaxLength & ", ParameterDirection." & inputOutput & ", true, 0, 0, """ & name & """, DataRowVersion.Default, Convert.DBNull);"
 			End If
 		Next
 %>					}
-					CreateParameters(db, dbCommand);
+					CreateParameters(dbCommand);
 
 					return dbCommand;
 
@@ -566,15 +568,16 @@ namespace <%= TrimSpaces(namespace) %>
 		{
             DbCommand dbCommand;
 
-			// Create the Database object, using the default database service. The
-			// default database service is determined through configuration.
-			Database db = GetDatabase();
-
 			switch(commandType)
 			{
 				case CommandType.StoredProcedure:
 					string sqlCommand = this.SchemaStoredProcedureWithSeparator + "<%= CreateProcedureName(objTable, "U") %>";
-					dbCommand = db.GetStoredProcCommand(sqlCommand);
+                    dbCommand = new SqlCommand
+                    {
+                        CommandType = CommandType.StoredProcedure,
+                        CommandText = sqlCommand,
+                        CommandTimeout = CommandTimeout > 0 ? CommandTimeout : 0
+                    };
 
 <%		output.tabLevel = 5
 		For Each objColumn in objTable.PrimaryKeys
@@ -587,10 +590,10 @@ namespace <%= TrimSpaces(namespace) %>
 			End if
 			
 			If isAutoKey Then
-				output.autoTabLn "db.AddInParameter(dbCommand, """ & name & """, " & objColumn.DbTargetType & ", """ & name & """, DataRowVersion.Current);"
+				output.autoTabLn "base.AddInParameter(dbCommand, """ & name & """, " & objColumn.DbTargetType & ", """ & name & """, DataRowVersion.Current);"
 			End If
 		Next
-%>					CreateParameters(db, dbCommand);
+%>					CreateParameters(dbCommand);
 					
 					return dbCommand;
 
@@ -622,7 +625,7 @@ namespace <%= TrimSpaces(namespace) %>
 %>					dbCommand = this.Query.GetUpdateCommandWrapper();
 
 					dbCommand.Parameters.Clear();
-					CreateParameters(db, dbCommand);
+					CreateParameters(dbCommand);
 <%		output.tabLevel = 5
 		For Each objColumn in objTable.PrimaryKeys
 			name = GetActualName(objColumn)
@@ -634,7 +637,7 @@ namespace <%= TrimSpaces(namespace) %>
 			End if
 			
 			If isAutoKey Then
-				output.autoTabLn "db.AddInParameter(dbCommand, """ & name & """, " & objColumn.DbTargetType & ", """ & name & """, DataRowVersion.Current);"
+				output.autoTabLn "base.AddInParameter(dbCommand, """ & name & """, " & objColumn.DbTargetType & ", """ & name & """, DataRowVersion.Current);"
 			End If
 		Next
 %>					
@@ -649,20 +652,22 @@ namespace <%= TrimSpaces(namespace) %>
 		{
             DbCommand dbCommand;
 
-			// Create the Database object, using the default database service. The
-			// default database service is determined through configuration.
-			Database db = GetDatabase();
-
 			switch(commandType)
 			{
 				case CommandType.StoredProcedure:
 					string sqlCommand = this.SchemaStoredProcedureWithSeparator + "<%= CreateProcedureName(objTable, "D") %>";
-					dbCommand = db.GetStoredProcCommand(sqlCommand);
+                    dbCommand = new SqlCommand
+                    {
+                        CommandType = CommandType.StoredProcedure,
+                        CommandText = sqlCommand,
+                        CommandTimeout = CommandTimeout > 0 ? CommandTimeout : 0
+                    };
+
 <%		output.tabLevel = 5
 		For Each objColumn in objTable.PrimaryKeys
 			name = GetActualName(objColumn)
 			alias = GetAlias(objColumn)
-			output.autoTabLn "db.AddInParameter(dbCommand, """ & name & """, " & objColumn.DbTargetType & ", """ & name & """, DataRowVersion.Current);"
+			output.autoTabLn "base.AddInParameter(dbCommand, """ & name & """, " & objColumn.DbTargetType & ", """ & name & """, DataRowVersion.Current);"
 		Next
 %>					
 					return dbCommand;
@@ -683,7 +688,7 @@ namespace <%= TrimSpaces(namespace) %>
 		For Each objColumn in objTable.PrimaryKeys
 			name = GetActualName(objColumn)
 			alias = GetAlias(objColumn)
-			output.autoTabLn "db.AddInParameter(dbCommand, """ & name & """, " & objColumn.DbTargetType & ", """ & name & """, DataRowVersion.Current);"
+			output.autoTabLn "base.AddInParameter(dbCommand, """ & name & """, " & objColumn.DbTargetType & ", """ & name & """, DataRowVersion.Current);"
 		Next
 %>					
 					return dbCommand;
@@ -693,7 +698,7 @@ namespace <%= TrimSpaces(namespace) %>
 			}
 		}
 
-		private void CreateParameters(Database db, DbCommand dbCommand)
+		private void CreateParameters(DbCommand dbCommand)
 		{
 <%		output.tabLevel = 3
 		For Each objColumn in objTable.Columns
@@ -712,18 +717,18 @@ namespace <%= TrimSpaces(namespace) %>
 			
 			If objColumn.IsComputed Then
 				If objColumn.DataTypeName = "timestamp" Then 
-					output.autoTabLn "db.AddParameter(dbCommand, """ & name & """, DbType.Binary, 8, ParameterDirection.InputOutput, false, 0, 0, """ & name & """, DataRowVersion.Current, null);"
+					output.autoTabLn "base.AddParameter(dbCommand, """ & name & """, DbType.Binary, 8, ParameterDirection.InputOutput, false, 0, 0, """ & name & """, DataRowVersion.Current, null);"
 				ElseIf objColumn.LanguageType = "string" Then 
-					output.autoTabLn "db.AddParameter(dbCommand, """ & name & """, " & objColumn.DbTargetType & ", " & objColumn.CharacterMaxLength & ", ParameterDirection.Output, true, 0, 0, """ & name & """, DataRowVersion.Current, null);"
+					output.autoTabLn "base.AddParameter(dbCommand, """ & name & """, " & objColumn.DbTargetType & ", " & objColumn.CharacterMaxLength & ", ParameterDirection.Output, true, 0, 0, """ & name & """, DataRowVersion.Current, null);"
 				Else
-					output.autoTabLn "db.AddParameter(dbCommand, """ & name & """, " & objColumn.DbTargetType & ", ParameterDirection.Output, """ & name & """, DataRowVersion.Current, null);"
+					output.autoTabLn "base.AddParameter(dbCommand, """ & name & """, " & objColumn.DbTargetType & ", ParameterDirection.Output, """ & name & """, DataRowVersion.Current, null);"
 				End If
 			ElseIf isAutoKey Then
 				' Skip auto keys
 			ElseIf isRowID Then 
-				output.autoTabLn "db.AddParameter(dbCommand, """ & name & """, " & objColumn.DbTargetType & ", ParameterDirection.InputOutput, """ & name & """, DataRowVersion.Current, null);"
+				output.autoTabLn "base.AddParameter(dbCommand, """ & name & """, " & objColumn.DbTargetType & ", ParameterDirection.InputOutput, """ & name & """, DataRowVersion.Current, null);"
 			Else
-				output.autoTabLn "db.AddInParameter(dbCommand, """ & name & """, " & objColumn.DbTargetType & ", """ & name & """, DataRowVersion.Current);"
+				output.autoTabLn "base.AddInParameter(dbCommand, """ & name & """, " & objColumn.DbTargetType & ", """ & name & """, DataRowVersion.Current);"
 			End If
 		Next
 %>		}
@@ -788,6 +793,7 @@ namespace <%= TrimSpaces(namespace) %>
 		#endregion		
 		
 		#region String Properties
+#pragma warning disable IDE1006 // Naming Styles
 <%	output.tabLevel = 2
 
 	For Each objColumn in objTable.Columns
@@ -828,8 +834,9 @@ namespace <%= TrimSpaces(namespace) %>
 		End If
 	
 	Next
-%>		#endregion		
-	
+%>#pragma warning restore IDE1006 // Naming Styles
+		#endregion
+		
 		#region Where Clause
 		public class WhereClause
 		{
@@ -883,23 +890,11 @@ namespace <%= TrimSpaces(namespace) %>
 			Dim fldName
 			
 			For Each objColumn in objTable.Columns
-				
-				name   = GetAlias(objColumn)		
-			
+				name   = GetAlias(objColumn)
 				fldName = "_" & name & "_W"
-				
-				output.write "			public WhereParameter " & name & vbCrLf 
-				output.write "		    {" & vbCrLf 				
-				output.write "				get" & vbCrLf 
-				output.write "		        {" & vbCrLf 				
-				output.write "					if(" & fldName & " == null)" & vbCrLf 
-				output.write "	        	    {" & vbCrLf 				
-				output.write "						" & fldName & " = TearOff." & name & ";" & vbCrLf
-				output.write "					}" & vbCrLf 
-				output.write "					return " & fldName & ";" & vbCrLf 
-				output.write "				}" & vbCrLf 
-				output.write "			}" & vbCrLf & vbCrLf 
+				output.write "			public WhereParameter " & name & " => " & fldName & " ?? (" & fldName & " = TearOff." & name & ");" & vbCrLf 
 			Next
+			output.write vbCrLf 
 			
 			For Each objColumn in objTable.Columns
 				name = "_" & GetAlias(objColumn)  & "_W"
@@ -923,18 +918,7 @@ namespace <%= TrimSpaces(namespace) %>
 			
 		}
 	
-		public WhereClause Where
-		{
-			get
-			{
-				if(_whereClause == null)
-				{
-					_whereClause = new WhereClause(this);
-				}
-		
-				return _whereClause;
-			}
-		}
+        public WhereClause Where => _whereClause ?? (_whereClause = new WhereClause(this));
 		
 		private WhereClause _whereClause = null;	
 		#endregion
@@ -942,31 +926,14 @@ namespace <%= TrimSpaces(namespace) %>
 		#region Aggregate Clause
 		public class AggregateClause
 		{
-			public AggregateClause(EasyObject entity)
-			{
-				this._entity = entity;
-			}
-			
-			public TearOffAggregateParameter TearOff
-			{
-				get
-				{
-					if(_tearOff == null)
-					{
-						_tearOff = new TearOffAggregateParameter(this);
-					}
+            public AggregateClause(EasyObject entity) => this._entity = entity;
 
-					return _tearOff;
-				}
-			}
+            public TearOffAggregateParameter TearOff => _tearOff ?? (_tearOff = new TearOffAggregateParameter(this));
 
 			#region TearOff's
 			public class TearOffAggregateParameter
 			{
-				public TearOffAggregateParameter(AggregateClause clause)
-				{
-					this._clause = clause;
-				}
+                public TearOffAggregateParameter(AggregateClause clause) => this._clause = clause;
 				
 				<% output.writeLn ""
 				For Each objColumn in objTable.Columns
@@ -991,23 +958,11 @@ namespace <%= TrimSpaces(namespace) %>
 		<% output.writeLn ""
 			
 			For Each objColumn in objTable.Columns
-				
 				name   = GetAlias(objColumn)		
-			
 				fldName = "_" & name & "_W"
-				
-				output.write "			public AggregateParameter " & name & vbCrLf 
-				output.write "		    {" & vbCrLf 				
-				output.write "				get" & vbCrLf 
-				output.write "		        {" & vbCrLf 				
-				output.write "					if(" & fldName & " == null)" & vbCrLf 
-				output.write "	        	    {" & vbCrLf 				
-				output.write "						" & fldName & " = TearOff." & name & ";" & vbCrLf
-				output.write "					}" & vbCrLf 
-				output.write "					return " & fldName & ";" & vbCrLf 
-				output.write "				}" & vbCrLf 
-				output.write "			}" & vbCrLf & vbCrLf 
+				output.write "			public AggregateParameter " & name & " => " & fldName & " ?? (" & fldName & " = TearOff." & name & ");" & vbCrLf 
 			Next
+			output.write vbCrLf 
 			
 			For Each objColumn in objTable.Columns
 				name = "_" & GetAlias(objColumn)  & "_W"
@@ -1031,18 +986,7 @@ namespace <%= TrimSpaces(namespace) %>
 			
 		}
 	
-		public AggregateClause Aggregate
-		{
-			get
-			{
-				if(_aggregateClause == null)
-				{
-					_aggregateClause = new AggregateClause(this);
-				}
-		
-				return _aggregateClause;
-			}
-		}
+        public AggregateClause Aggregate => _aggregateClause ?? (_aggregateClause = new AggregateClause(this));
 		
 		private AggregateClause _aggregateClause = null;	
 		#endregion
