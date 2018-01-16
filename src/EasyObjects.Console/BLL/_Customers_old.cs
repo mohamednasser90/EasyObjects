@@ -35,7 +35,7 @@ using NCI.EasyObjects;
 namespace EasyObjects.Console.BLL
 {
 
-    public class CustomersSchema : NCI.EasyObjects.Schema
+    public class CustomersOldSchema : NCI.EasyObjects.Schema
     {
         private static List<SchemaItem> _entries;
         public static SchemaItem CustomerID = new SchemaItem("CustomerID", DbType.StringFixedLength, SchemaItemJustify.None, 5, false, true, true, false);

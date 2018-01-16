@@ -33,6 +33,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
+    <Reference Include="System.ComponentModel.DataAnnotations" />
     <Reference Include="System.Configuration" />
     <Reference Include="System.Core" />
     <Reference Include="System.Xml.Linq" />
@@ -46,7 +47,12 @@
     <Compile Include="BLL\Customers.cs" />
     <Compile Include="BLL\Employees.cs" />
     <Compile Include="BLL\Products.cs" />
-    <Compile Include="BLL\_Customers.cs" />
+    <Compile Include="BLL\_Customers_old.cs" />
+    <Compile Include="BLL\_Customers1.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>_Customers.tt</DependentUpon>
+    </Compile>
     <Compile Include="BLL\_Employees.cs" />
     <Compile Include="BLL\_Products.cs" />
     <Compile Include="Program.cs" />
@@ -60,6 +66,15 @@
       <Project>{f39af67b-05a4-47ac-99fa-9bbd6efb3e9e}</Project>
       <Name>EasyObjects</Name>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="BLL\_Customers.tt">
+      <Generator>TextTemplatingFileGenerator</Generator>
+      <LastGenOutput>_Customers1.cs</LastGenOutput>
+    </Content>
+  </ItemGroup>
+  <ItemGroup>
+    <Service Include="{508349B6-6B84-4DF5-91F0-309BEEBAD82D}" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
