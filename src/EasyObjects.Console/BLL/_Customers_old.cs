@@ -32,10 +32,10 @@ using System.Data.Common;
 using System.Data.SqlClient;
 using NCI.EasyObjects;
 
-namespace EasyObjects.Console.BLL
+namespace EasyObjects.Console.BLL2
 {
 
-    public class CustomersOldSchema : NCI.EasyObjects.Schema
+    public class CustomersSchema : NCI.EasyObjects.Schema
     {
         private static List<SchemaItem> _entries;
         public static SchemaItem CustomerID = new SchemaItem("CustomerID", DbType.StringFixedLength, SchemaItemJustify.None, 5, false, true, true, false);
