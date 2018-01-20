@@ -30,7 +30,7 @@ namespace EasyObjects.Console.BLL
         private static List<SchemaItem> _entries;
 <#foreach (Column column in table.Columns)
 {#>
-        public static SchemaItem <#= column.Name #> = new SchemaItem("<#= column.Name #>", <#= GetDbType(column.DataType.Name) #>, SchemaItemJustify.None, <#= column.DataType.MaximumLength #>, <#= column.Nullable.ToString().ToLower() #>, <#= column.InPrimaryKey.ToString().ToLower() #>, <#= column.IsForeignKey.ToString().ToLower() #>, <#= string.IsNullOrWhiteSpace(column.Default) ? "false" : "true" #>);
+        public static SchemaItem <#= column.Name #> = new SchemaItem("<#= column.Name #>", <#= GetDbType(column) #>, SchemaItemJustify.None, <#= column.DataType.MaximumLength #>, <#= column.Nullable.ToString().ToLower() #>, <#= column.InPrimaryKey.ToString().ToLower() #>, <#= column.IsForeignKey.ToString().ToLower() #>, <#= string.IsNullOrWhiteSpace(column.Default) ? "false" : "true" #>);
 <#}#>
         
 		public override List<SchemaItem> SchemaEntries
@@ -94,7 +94,7 @@ namespace EasyObjects.Console.BLL
         {
 			Write(", ");
         }
-		Write(GetSystemType(column.DataType.Name) + " " + FormatColumnName(column));
+		Write(GetSystemType(column) + " " + FormatColumnName(column));
 		first = false;
     }
 #>)
@@ -192,6 +192,341 @@ namespace EasyObjects.Console.BLL
     }
 	PopIndent();
 #>		}
+
+		protected override DbCommand GetInsertCommand(CommandType commandType)
+		{	
+			DbCommand dbCommand;
+
+			switch(commandType)
+			{
+				case CommandType.StoredProcedure:
+					string sqlCommand = this.SchemaStoredProcedureWithSeparator + "<#= CreateProcedureName(table, "I") #>";
+                    dbCommand = new SqlCommand
+                    {
+                        CommandType = CommandType.StoredProcedure,
+                        CommandText = sqlCommand,
+                        CommandTimeout = CommandTimeout > 0 ? CommandTimeout : 0
+                    };
+
+<#
+	PushIndent("\t\t\t\t\t");
+	foreach (Column column in table.Columns)
+    {
+		if (!column.InPrimaryKey) continue;
+		if (column.Identity)
+        {
+			WriteLine("base.AddParameter(dbCommand, \"" + column.Name + "\", " + GetDbType(column) + ", " + column.DataType.MaximumLength + ", ParameterDirection.Output, true, 0, 0, \"" + column.Name + "\", DataRowVersion.Default, Convert.DBNull);");
+        }
+    }
+	PopIndent();
+#>					CreateParameters(dbCommand);
+					
+					return dbCommand;
+
+				case CommandType.Text:
+					this.Query.ClearAll();
+					this.Where.WhereClauseReset();
+					foreach(SchemaItem item in this.SchemaEntries)
+					{
+						if (!item.IsComputed)
+						{
+							if ((item.IsAutoKey && this.IdentityInsert) || !item.IsAutoKey)
+							{
+								this.Query.AddInsertColumn(item);
+							}
+						}
+					}
+					dbCommand = this.Query.GetInsertCommandWrapper();
+
+					dbCommand.Parameters.Clear();
+					if (this.IdentityInsert)
+					{
+<#
+	PushIndent("\t\t\t\t\t\t");
+	foreach (Column column in table.Columns)
+    {
+		if (!column.InPrimaryKey) continue;
+		if (column.Identity)
+        {
+			WriteLine("base.AddInParameter(dbCommand, \"" + column.Name + "\", " + GetDbType(column) + ", \"" + column.Name + "\", DataRowVersion.Default);");
+        }
+    }
+	PopIndent();
+#>					}
+					else
+					{
+<#
+	PushIndent("\t\t\t\t\t\t");
+	foreach (Column column in table.Columns)
+    {
+		if (!column.InPrimaryKey) continue;
+		if (column.Identity)
+        {
+			WriteLine("base.AddParameter(dbCommand, \"" + column.Name + "\", " + GetDbType(column) + ", " + column.DataType.MaximumLength + ", ParameterDirection.Output, true, 0, 0, \"" + column.Name + "\", DataRowVersion.Default, Convert.DBNull);");
+        }
+    }
+	PopIndent();
+#>					}
+					CreateParameters(dbCommand);
+
+					return dbCommand;
+
+				default:
+					throw new ArgumentException("Invalid CommandType", "commandType");
+			}
+		}
+
+		protected override DbCommand GetUpdateCommand(CommandType commandType)
+		{
+            DbCommand dbCommand;
+
+			switch(commandType)
+			{
+				case CommandType.StoredProcedure:
+					string sqlCommand = this.SchemaStoredProcedureWithSeparator + "<#= CreateProcedureName(table, "U") #>";
+                    dbCommand = new SqlCommand
+                    {
+                        CommandType = CommandType.StoredProcedure,
+                        CommandText = sqlCommand,
+                        CommandTimeout = CommandTimeout > 0 ? CommandTimeout : 0
+                    };
+
+<#
+	PushIndent("\t\t\t\t\t");
+	foreach (Column column in table.Columns)
+    {
+		if (!column.InPrimaryKey) continue;
+		if (column.Identity)
+        {
+			WriteLine("base.AddParameter(dbCommand, \"" + column.Name + "\", " + GetDbType(column) + ", " + column.DataType.MaximumLength + ", ParameterDirection.Output, true, 0, 0, \"" + column.Name + "\", DataRowVersion.Default, Convert.DBNull);");
+        }
+    }
+	PopIndent();
+#>					CreateParameters(dbCommand);
+					
+					return dbCommand;
+
+				case CommandType.Text:
+					this.Query.ClearAll();
+					foreach(SchemaItem item in this.SchemaEntries)
+					{
+						if (!(item.IsAutoKey || item.IsComputed))
+						{
+							this.Query.AddUpdateColumn(item);
+						}
+					}
+
+					this.Where.WhereClauseReset();
+<#
+	PushIndent("\t\t\t\t\t");
+	foreach (Column column in table.Columns)
+    {
+		if (column.InPrimaryKey || column.DataType.Name.ToLower() == "timestamp")
+        {
+			WriteLine("this.Where." + column.Name + ".Operator = WhereParameter.Operand.Equal;");
+        }
+    }
+	PopIndent();
+#>					dbCommand = this.Query.GetUpdateCommandWrapper();
+
+					dbCommand.Parameters.Clear();
+					CreateParameters(dbCommand);
+<#
+	PushIndent("\t\t\t\t\t");
+	foreach (Column column in table.Columns)
+    {
+		if (!column.InPrimaryKey) continue;
+		if (column.Identity)
+        {
+			WriteLine("base.AddInParameter(dbCommand, \"" + column.Name + "\", " + GetDbType(column) + ", \"" + column.Name + "\", DataRowVersion.Current);");
+        }
+    }
+	PopIndent();
+#>					
+					return dbCommand;
+
+				default:
+					throw new ArgumentException("Invalid CommandType", "commandType");
+			}
+		}
+
+		protected override DbCommand GetDeleteCommand(CommandType commandType)
+		{
+            DbCommand dbCommand;
+
+			switch(commandType)
+			{
+				case CommandType.StoredProcedure:
+					string sqlCommand = this.SchemaStoredProcedureWithSeparator + "<#= CreateProcedureName(table, "D") #>";
+                    dbCommand = new SqlCommand
+                    {
+                        CommandType = CommandType.StoredProcedure,
+                        CommandText = sqlCommand,
+                        CommandTimeout = CommandTimeout > 0 ? CommandTimeout : 0
+                    };
+
+<#
+	PushIndent("\t\t\t\t\t");
+	foreach (Column column in table.Columns)
+    {
+		if (column.InPrimaryKey)
+        {
+			WriteLine("base.AddInParameter(dbCommand, \"" + column.Name + "\", " + GetDbType(column) + ", \"" + column.Name + "\", DataRowVersion.Current);");
+        }
+    }
+	PopIndent();
+#>					
+					return dbCommand;
+
+				case CommandType.Text:
+					this.Query.ClearAll();
+					this.Where.WhereClauseReset();
+<#
+	PushIndent("\t\t\t\t\t");
+	foreach (Column column in table.Columns)
+    {
+		if (column.InPrimaryKey)
+        {
+			WriteLine("this.Where." + column.Name + ".Operator = WhereParameter.Operand.Equal;");
+        }
+    }
+	PopIndent();
+#>					dbCommand = this.Query.GetDeleteCommandWrapper();
+
+					dbCommand.Parameters.Clear();
+<#
+	PushIndent("\t\t\t\t\t");
+	foreach (Column column in table.Columns)
+    {
+		if (column.InPrimaryKey)
+        {
+			WriteLine("base.AddInParameter(dbCommand, \"" + column.Name + "\", " + GetDbType(column) + ", \"" + column.Name + "\", DataRowVersion.Current);");
+        }
+    }
+	PopIndent();
+#>					
+					return dbCommand;
+
+				default:
+					throw new ArgumentException("Invalid CommandType", "commandType");
+			}
+		}
+
+		private void CreateParameters(DbCommand dbCommand)
+		{
+<#
+	PushIndent("\t\t\t");
+	foreach (Column column in table.Columns)
+    {
+		bool isAutoKey = column.Identity;
+			
+		if (column.Computed)
+        {
+			if (column.DataType.Name.ToLower() == "timestamp")
+            {
+				WriteLine("base.AddParameter(dbCommand, \"" + column.Name + "\", DbType.Binary, 8, ParameterDirection.InputOutput, false, 0, 0, \"" + column.Name + "\", DataRowVersion.Current, null);");
+            }
+			else if (GetSystemType(column) == "string")
+            {
+				WriteLine("base.AddParameter(dbCommand, \"" + column.Name + "\", " + GetDbType(column) + ", " + column.DataType.MaximumLength + ", ParameterDirection.Output, true, 0, 0, \"" + column.Name + "\", DataRowVersion.Current, null);");
+            }
+			else
+            {
+				WriteLine("base.AddParameter(dbCommand, \"" + column.Name + "\", " + GetDbType(column) + ", ParameterDirection.Output, \"" + column.Name + "\", DataRowVersion.Current, null);");
+            }
+        }
+		else if (isAutoKey)
+        {
+			//' Skip auto keys
+        }
+		else
+        {
+			WriteLine("base.AddInParameter(dbCommand, \"" + column.Name + "\", " + GetDbType(column) + ", \"" + column.Name + "\", DataRowVersion.Current);");
+        }
+    }
+	PopIndent();
+#>		}
+
+		#region Properties
+<#
+	PushIndent("\t\t\t\t");
+	foreach (Column column in table.Columns)
+    {
+		string name = column.Name;
+		string langType = GetSystemType(column);
+		string nativeType = GetNativeType(column);
+#>		public virtual <#= langType #> <#= name #>
+		{
+			get
+			{
+<#		if (langType == "byte[]")
+        {
+			WriteLine("return this.GetByteArray(" + table.Name + "Schema." + name + ".FieldName);");
+        }
+		else
+        {
+			WriteLine("return this.Get" + nativeType + "(" + table.Name + "Schema." + name + ".FieldName);");
+        }
+#>	    	}
+			set
+			{
+<#		if (langType == "byte[]")
+        {
+			WriteLine("this.SetByteArray(" + table.Name + "Schema." + name + ".FieldName, value);");
+        }
+		else
+        {
+			WriteLine("this.Set" + nativeType + "(" + table.Name + "Schema." + name + ".FieldName, value);");
+        }
+#>			}
+		}
+<#
+	}
+	PopIndent();
+#>
+		public override string TableName
+		{
+			get { return "<#= table.Name #>"; }
+		}
+		
+		#endregion		
+		
+		#region String Properties
+#pragma warning disable IDE1006 // Naming Styles
+<#
+	foreach (Column column in table.Columns)
+    {
+		string langType = GetSystemType(column);
+
+		if (langType == "object" || langType.Contains("["))
+        {
+			continue;
+        }
+
+		string name = column.Name;
+		string nativeType = GetNativeType(column);
+		string fieldName = table.Name + "Schema." + name + ".FieldName";
+#>		public virtual string s_<#= name #>
+		{
+			get
+			{
+				return this.IsColumnNull("<#= fieldName #>") ? string.Empty : base.Get<#= nativeType #>AsString(<#= fieldName #>);
+			}
+			set
+			{
+				if (string.IsNullOrEmpty(value))
+				{
+					this.SetColumnNull(<#= table.Name #>Schema.<#= name #>.FieldName);
+				}
+				else
+				{
+					this.<#= name #> = base.Set<#= nativeType #>AsString(<#= fieldName #>, value);
+				}
+			}
+		}
+<#	}
+#>#pragma warning restore IDE1006 // Naming Styles
+		#endregion
 	}
 
     /// <summary>
@@ -209,7 +544,7 @@ namespace EasyObjects.Console.BLL
 			WriteLine("[Key]");
 		}
 
-		WriteLine("public virtual " + GetSystemType(column.DataType.Name) + (column.Nullable && !column.DataType.IsStringType ? "?" : "") + " " + column.Name + " { get; set; }");
+		WriteLine("public virtual " + GetSystemType(column) + (column.Nullable && !column.DataType.IsStringType ? "?" : "") + " " + column.Name + " { get; set; }");
 	}
 	PopIndent();
 #>	}
@@ -224,7 +559,7 @@ bool HasAutoKey (ColumnCollection columns)
 {
 	foreach (Column column in columns)
     {
-		if (column.InPrimaryKey)
+		if (column.Identity)
         {
 			return true;
         }
@@ -233,10 +568,12 @@ bool HasAutoKey (ColumnCollection columns)
 	return false;
 }
 
-string GetDbType (string sqlType)
+string GetDbType (Column column)
 {
+	string sqlType = column.DataType.Name.ToLower();
 	string dbType="DbType.String";
-	switch (sqlType.ToLower()) 
+
+	switch (sqlType) 
 	{
 		case "bigint":
 			dbType = "DbType.Int64";
@@ -249,14 +586,14 @@ string GetDbType (string sqlType)
 			break;
 		case "uniqueidentifier":
 			dbType=  "DbType.Guid";
-				break;
+			break;
 		case "smalldatetime":
 		case "datetime":
 		case "datetime2":
 		case "date":
 		case "time":
 			dbType=  "DbType.DateTime";
-				break;
+			break;
 		case "float":
 			dbType="DbType.Double";
 			break;
@@ -268,39 +605,41 @@ string GetDbType (string sqlType)
 		case "decimal":
 		case "money":
 			dbType=  "DbType.Decimal";
-				break;
+			break;
 		case "tinyint":
 			dbType = "DbType.byte";
 			break;
 		case "bit":
 			dbType=  "DbType.Boolean";
-				break;
+			break;
 		case "image":
 		case "binary":
 		case "varbinary":
 		case "timestamp":
 			dbType=  "DbType.Binary";
-				break;
+			break;
         case "char":
 			dbType=  "DbType.AnsiStringFixedLength";
-				break;
+			break;
         case "varchar":
 			dbType=  "DbType.AnsiString";
-				break;
+			break;
         case "nchar":
 			dbType=  "DbType.StringFixedLength";
-				break;
+			break;
         case "nvarchar":
 			dbType=  "DbType.String";
-				break;
+			break;
 	}
 	return dbType;
 }
 
-string GetSystemType(string sqlType)
+string GetSystemType(Column column)
 {
+	string sqlType = column.DataType.Name.ToLower();
 	string sysType="string";
-	switch (sqlType.ToLower()) 
+
+	switch (sqlType) 
 	{
 		case "bigint":
 			sysType = "long";
@@ -313,14 +652,14 @@ string GetSystemType(string sqlType)
 			break;
 		case "uniqueidentifier":
 			sysType=  "Guid";
-				break;
+			break;
 		case "smalldatetime":
 		case "datetime":
 		case "datetime2":
 		case "date":
 		case "time":
 			sysType=  "DateTime";
-				break;
+			break;
 		case "float":
 			sysType="double";
 			break;
@@ -332,19 +671,19 @@ string GetSystemType(string sqlType)
 		case "decimal":
 		case "money":
 			sysType=  "decimal";
-				break;
+			break;
 		case "tinyint":
 			sysType = "byte";
 			break;
 		case "bit":
 			sysType=  "bool";
-				break;
+			break;
 		case "image":
 		case "binary":
 		case "varbinary":
 		case "timestamp":
 			sysType=  "byte[]";
-				break;
+			break;
 		case "geography":
 			sysType = "Microsoft.SqlServer.Types.SqlGeography";
 			break;
@@ -352,7 +691,40 @@ string GetSystemType(string sqlType)
 			sysType = "Microsoft.SqlServer.Types.SqlGeometry";
 			break;
 	}
+
 	return sysType;
+}
+
+
+string GetNativeType(Column column)
+{
+	switch (GetSystemType(column))
+    {
+		case "string":
+			return "String";
+		case "int":
+			return "Integer";
+		case "short":
+			return "Short";
+		case "decimal":
+			return "Decimal";
+		case "double":
+			return "Double";
+		case "datetime":
+			return "DateTime";
+		case "byte[]":
+			return "Byte";
+		case "byte":
+			return "Byte";
+		case "bool":
+			return "Boolean";
+		case "float":
+			return "Float";
+		case "long":
+			return "Long";
+		default:
+			return column.DataType.Name;
+	}	
 }
 
 string CreateProcedureName(Table objTable, string suffix)
