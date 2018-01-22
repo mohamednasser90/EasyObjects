@@ -11,7 +11,7 @@
 <#
     var server = new Server(".\\SQLEXPRESS");
     var database = new Database(server, "Northwind");
-    var table = new Table(database, "Customers");
+    var table = new Table(database, "Employees");
     table.Refresh();
 #>
 /*

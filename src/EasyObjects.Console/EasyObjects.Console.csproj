@@ -47,14 +47,21 @@
     <Compile Include="BLL\Customers.cs" />
     <Compile Include="BLL\Employees.cs" />
     <Compile Include="BLL\Products.cs" />
-    <Compile Include="BLL\_Customers_old.cs" />
-    <Compile Include="BLL\_Customers1.cs">
+    <Compile Include="BLL\_Customers.cs">
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>
       <DependentUpon>_Customers.tt</DependentUpon>
     </Compile>
-    <Compile Include="BLL\_Employees.cs" />
-    <Compile Include="BLL\_Products.cs" />
+    <Compile Include="BLL\_Employees.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>_Employees.tt</DependentUpon>
+    </Compile>
+    <Compile Include="BLL\_Products.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>_Products.tt</DependentUpon>
+    </Compile>
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
@@ -70,7 +77,15 @@
   <ItemGroup>
     <Content Include="BLL\_Customers.tt">
       <Generator>TextTemplatingFileGenerator</Generator>
-      <LastGenOutput>_Customers1.cs</LastGenOutput>
+      <LastGenOutput>_Customers.cs</LastGenOutput>
+    </Content>
+    <Content Include="BLL\_Employees.tt">
+      <Generator>TextTemplatingFileGenerator</Generator>
+      <LastGenOutput>_Employees.cs</LastGenOutput>
+    </Content>
+    <Content Include="BLL\_Products.tt">
+      <Generator>TextTemplatingFileGenerator</Generator>
+      <LastGenOutput>_Products.cs</LastGenOutput>
     </Content>
   </ItemGroup>
   <ItemGroup>
