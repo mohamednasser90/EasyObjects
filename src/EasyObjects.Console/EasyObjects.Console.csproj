@@ -46,6 +46,11 @@
   <ItemGroup>
     <Compile Include="BLL\Customers.cs" />
     <Compile Include="BLL\Employees.cs" />
+    <Compile Include="BLL\ProductListView.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>ProductListView.tt</DependentUpon>
+    </Compile>
     <Compile Include="BLL\Products.cs" />
     <Compile Include="BLL\_Customers.cs">
       <AutoGen>True</AutoGen>
@@ -75,6 +80,10 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <Content Include="BLL\ProductListView.tt">
+      <Generator>TextTemplatingFileGenerator</Generator>
+      <LastGenOutput>ProductListView.cs</LastGenOutput>
+    </Content>
     <Content Include="BLL\_Customers.tt">
       <Generator>TextTemplatingFileGenerator</Generator>
       <LastGenOutput>_Customers.cs</LastGenOutput>

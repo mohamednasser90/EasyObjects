@@ -73,7 +73,7 @@ namespace EasyObjects.Console.BLL
         public static bool HasRowID { get => false; }
 	}
 	
-	public abstract class _Products : EasyObject
+	public class _Products : EasyObject
 	{
 
 		public _Products()

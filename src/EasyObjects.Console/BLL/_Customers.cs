@@ -75,7 +75,7 @@ namespace EasyObjects.Console.BLL
         public static bool HasRowID { get => false; }
 	}
 	
-	public abstract class _Customers : EasyObject
+	public class _Customers : EasyObject
 	{
 
 		public _Customers()

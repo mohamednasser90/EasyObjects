@@ -9,10 +9,12 @@
 <#@ import namespace="System.Linq" #>
 <#@ import namespace="Microsoft.SqlServer.Management.Smo" #>
 <#
-    var server = new Server(".\\SQLEXPRESS");
-    var database = new Database(server, "Northwind");
-    var table = new Table(database, "Customers");
-    table.Refresh();
+	var server = new Server(".\\SQLEXPRESS");
+	var database = new Database(server, "Northwind");
+	var table = new Table(database, "Customers");
+	table.Refresh();
+
+	string tableAlias = TrimSpaces(table.Name);
 #>
 /*
 '===============================================================================
@@ -46,7 +48,7 @@ using NCI.EasyObjects;
 
 namespace EasyObjects.Console.BLL
 {
-    public class <#= table.Name #>Schema : NCI.EasyObjects.Schema
+    public class <#= tableAlias #>Schema : NCI.EasyObjects.Schema
     {
         private static List<SchemaItem> _entries;
 <#
@@ -74,7 +76,7 @@ namespace EasyObjects.Console.BLL
                     {
 <#foreach (Column column in table.Columns)
 {#>
-                        <#= table.Name #>Schema.<#= column.Name #>,
+                        <#= tableAlias #>Schema.<#= column.Name #>,
 <#}#>
                     };
                 }
@@ -87,12 +89,12 @@ namespace EasyObjects.Console.BLL
         public static bool HasRowID { get => false; }
 	}
 	
-	public abstract class _<#= table.Name #> : EasyObject
+	public class _<#= tableAlias #> : EasyObject
 	{
 
-		public _<#= table.Name #>()
+		public _<#= tableAlias #>()
 		{
-			<#= table.Name #>Schema _schema = new <#= table.Name #>Schema();
+			<#= tableAlias #>Schema _schema = new <#= tableAlias #>Schema();
 			this.SchemaEntries = _schema.SchemaEntries;
 			this.SchemaGlobal = "<#= table.Schema #>";
 		}
@@ -493,11 +495,11 @@ namespace EasyObjects.Console.BLL
 		PushIndent("\t\t\t\t");
 		if (langType == "byte[]")
         {
-			WriteLine("return this.GetByteArray(" + table.Name + "Schema." + name + ".FieldName);");
+			WriteLine("return this.GetByteArray(" + tableAlias + "Schema." + name + ".FieldName);");
         }
 		else
         {
-			WriteLine("return this.Get" + nativeType + "(" + table.Name + "Schema." + name + ".FieldName);");
+			WriteLine("return this.Get" + nativeType + "(" + tableAlias + "Schema." + name + ".FieldName);");
         }
 		PopIndent();
 #>	    	}
@@ -507,11 +509,11 @@ namespace EasyObjects.Console.BLL
 		PushIndent("\t\t\t\t");
 		if (langType == "byte[]")
         {
-			WriteLine("this.SetByteArray(" + table.Name + "Schema." + name + ".FieldName, value);");
+			WriteLine("this.SetByteArray(" + tableAlias + "Schema." + name + ".FieldName, value);");
         }
 		else
         {
-			WriteLine("this.Set" + nativeType + "(" + table.Name + "Schema." + name + ".FieldName, value);");
+			WriteLine("this.Set" + nativeType + "(" + tableAlias + "Schema." + name + ".FieldName, value);");
         }
 		PopIndent();
 #>			}
@@ -540,7 +542,7 @@ namespace EasyObjects.Console.BLL
 
 		string name = column.Name;
 		string nativeType = GetNativeType(column);
-		string fieldName = table.Name + "Schema." + name + ".FieldName";
+		string fieldName = tableAlias + "Schema." + name + ".FieldName";
 #>		public virtual string s_<#= name #>
 		{
 			get
@@ -551,7 +553,7 @@ namespace EasyObjects.Console.BLL
 			{
 				if (string.IsNullOrEmpty(value))
 				{
-					this.SetColumnNull(<#= table.Name #>Schema.<#= name #>.FieldName);
+					this.SetColumnNull(<#= fieldName #>);
 				}
 				else
 				{
@@ -601,7 +603,7 @@ namespace EasyObjects.Console.BLL
 				{
 					get
 					{
-						WhereParameter wp = new WhereParameter(<#= table.Name #>Schema.<#= name #>);
+						WhereParameter wp = new WhereParameter(<#= tableAlias #>Schema.<#= name #>);
 						this._clause._entity.Query.AddWhereParameter(wp);
 						return wp;
 					}
@@ -679,7 +681,7 @@ namespace EasyObjects.Console.BLL
 				{
 					get
 					{
-						AggregateParameter ap = new AggregateParameter(<#= table.Name #>Schema.<#= name #>);
+						AggregateParameter ap = new AggregateParameter(<#= tableAlias #>Schema.<#= name #>);
 						this._clause._entity.Query.AddAggregateParameter(ap);
 						return ap;
 					}
@@ -1016,5 +1018,31 @@ string CreateProcedureName(Table objTable, string suffix)
 string BuildProcedureName(string sVerb, string sTableName)
 {	
 	return "daab_" + sVerb + sTableName;
+}
+string TrimSpaces(string s)
+{
+	System.Text.StringBuilder sb = new System.Text.StringBuilder();
+	bool capitalize = false;
+
+	foreach (char c in s)
+    {
+		if (c == ' ')
+        {
+			capitalize = true;
+			continue;
+        }
+
+		if (capitalize)
+        {
+			sb.Append(c.ToString().ToUpper());
+			capitalize = false;
+        }
+		else
+        {
+			sb.Append(c);
+        }
+    }
+
+	return sb.ToString();
 }
 #>
