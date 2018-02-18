@@ -1,4 +1,5 @@
 ﻿using EasyObjects.Console.BLL;
+using System;
 using System.Configuration;
 
 namespace EasyObjects.Console
@@ -10,9 +11,43 @@ namespace EasyObjects.Console
             DemoEmployees();
             DemoCustomers();
             DemoProducts();
+            DemoProductsView();
 
             System.Console.WriteLine("\nPress <Enter> to continue...");
             System.Console.ReadLine();
+        }
+
+        private static void PrintBanner(string method)
+        {
+            System.Console.WriteLine("*************************************************");
+            System.Console.WriteLine($" Method: {method}");
+            System.Console.WriteLine("*************************************************");
+        }
+
+        private static void DemoProductsView()
+        {
+            // Note: no need to set the DefaultCommmandType, custom queries are always run as inline SQL
+            AlphabeticalListOfProducts view = new AlphabeticalListOfProducts
+            {
+                ConnectionString = ConfigurationManager.ConnectionStrings["Default"].ConnectionString
+            };
+
+            view.Where.ProductName.Value = "M";
+            view.Where.ProductName.Operator = NCI.EasyObjects.WhereParameter.Operand.StartsWith;
+
+            PrintBanner(System.Reflection.MethodBase.GetCurrentMethod().Name);
+            if (view.Query.Load())
+            {
+                System.Console.WriteLine($"Generated query:\n{view.Query.LastQuery}");
+                do
+                {
+                    System.Console.WriteLine($"{view.s_ProductID}, {view.s_ProductName}\t\t{view.UnitPrice:C}");
+                } while (view.MoveNext());
+            }
+            else
+            {
+                System.Console.WriteLine(view.ErrorMessage);
+            }
         }
 
         private static void DemoCustomers()
@@ -23,6 +58,7 @@ namespace EasyObjects.Console
                 ConnectionString = ConfigurationManager.ConnectionStrings["Default"].ConnectionString
             };
 
+            PrintBanner(System.Reflection.MethodBase.GetCurrentMethod().Name);
             if (cust.LoadByPrimaryKey("CACTU"))
             {
                 do
@@ -66,6 +102,7 @@ namespace EasyObjects.Console
             prod.Save();
 
             // Display the updated EasyObject
+            PrintBanner(System.Reflection.MethodBase.GetCurrentMethod().Name);
             System.Console.WriteLine($"{prod.s_ProductID} {prod.s_ProductName}, {prod.s_UnitsInStock}");
 
             // Delete the new addition
@@ -100,6 +137,7 @@ namespace EasyObjects.Console
             // Add a WHERE clause
             employees.Where.Region.Value = "WA";
 
+            PrintBanner(System.Reflection.MethodBase.GetCurrentMethod().Name);
             if (employees.Query.Load())
             {
                 System.Console.WriteLine($"Generated query:\n{employees.Query.LastQuery}");
