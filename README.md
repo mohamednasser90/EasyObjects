@@ -2,6 +2,7 @@ EasyObjects
 ===========
 
 New home of the EasyObjects 2.x repository. Version 1.2 of EasyObjects can still be found at [Tigris](http://easyobjects.tigris.org).
+Test update for GitHub integrations
 
 [![Build status](https://ci.appveyor.com/api/projects/status/edswglxyrbn7t7sa?svg=true)](https://ci.appveyor.com/project/mgnoonan/easyobjects)
 
